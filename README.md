@@ -94,9 +94,10 @@ db_root_password: "root_пароль_от_MariaDB"
 
 Аддон выполнит:
 ```sql
-CREATE DATABASE IF NOT EXISTS smarthome CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
-CREATE USER IF NOT EXISTS 'smarthome'@'%' IDENTIFIED BY 'your_password';
-GRANT ALL PRIVILEGES ON smarthome.* TO 'smarthome'@'%';
+-- значения берутся из конфигурации аддона (db_name, db_user, db_password)
+CREATE DATABASE IF NOT EXISTS `smarthome` CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
+CREATE USER IF NOT EXISTS 'smarthome'@'%' IDENTIFIED BY '<db_password из конфига>';
+GRANT ALL PRIVILEGES ON `smarthome`.* TO 'smarthome'@'%';
 FLUSH PRIVILEGES;
 ```
 
