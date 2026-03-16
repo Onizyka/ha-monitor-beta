@@ -1,0 +1,28 @@
+# Web framework
+fastapi==0.115.6
+uvicorn[standard]==0.32.1
+
+# Database
+sqlalchemy==2.0.36
+greenlet==3.1.1
+aiomysql==0.2.0
+pymysql==1.1.1
+
+# Migrations
+alembic==1.14.0
+
+# HTTP client for HA API
+httpx==0.28.1
+
+# Config
+pydantic==2.10.3
+pydantic-settings==2.7.0
+
+# Telegram
+python-telegram-bot==21.7
+
+# Scheduler
+apscheduler==3.10.4
+
+# MQTT
+aiomqtt==2.3.0

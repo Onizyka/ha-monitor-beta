@@ -1,0 +1,1815 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8">
+<meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
+<meta http-equiv="Pragma" content="no-cache">
+<meta http-equiv="Expires" content="0">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Home Assistant Monitor</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
+<style>
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+:root{
+  --bg:#0f1117;--bg2:#1a1d27;--bg3:#22263a;--bg4:#2a2f44;
+  --border:rgba(255,255,255,0.08);--border2:rgba(255,255,255,0.15);
+  --text:#e2e8f0;--muted:#64748b;--muted2:#94a3b8;
+  --green:#22c55e;--yellow:#eab308;--red:#ef4444;--blue:#3b82f6;
+  --r:10px;
+}
+body{background:var(--bg);color:var(--text);font-family:system-ui,sans-serif;font-size:14px;min-height:100vh;-webkit-text-size-adjust:100%}
+.app{max-width:1400px;margin:0 auto;padding:16px 16px 60px}
+@media(max-width:480px){
+  .app{padding:10px 10px 60px}
+  .hdr-back{font-size:11px;padding:4px 7px}
+  .hdr-title{font-size:14px}
+  .ts-line,.ts-countdown{font-size:10px}
+  .btn{padding:4px 10px;font-size:11px}
+  .stats{grid-template-columns:repeat(2,1fr);gap:8px;margin-bottom:12px}
+  .stat .val{font-size:20px}
+  .grid2{grid-template-columns:1fr;gap:8px}
+  .chart-box{height:160px}
+  .modal{padding:16px;max-height:95vh}
+  .settings-panel{width:100%;max-width:100%}
+  .name{max-width:140px}
+}
+
+/* ── Header ── */
+.header{position:relative;display:flex;align-items:center;justify-content:center;margin-bottom:16px;padding:10px 0;border-bottom:1px solid var(--border)}
+.hdr-back{position:absolute;left:0;display:flex;align-items:center;gap:6px;font-size:13px;color:var(--muted);cursor:pointer;text-decoration:none;padding:6px 10px;border-radius:6px;border:1px solid var(--border);background:transparent;transition:background .15s}
+.hdr-back:hover{background:var(--bg3);color:var(--text)}
+.hdr-center{text-align:center}
+.hdr-title{font-size:17px;font-weight:600;letter-spacing:.02em}
+.hdr-live{display:inline-flex;align-items:center;gap:5px;font-size:11px;color:var(--green);margin-top:3px}
+.live-dot{width:7px;height:7px;border-radius:50%;background:var(--green);animation:blink 1.6s ease-in-out infinite;display:inline-block}
+@keyframes blink{0%,100%{opacity:1}50%{opacity:.3}}
+.hdr-right{position:absolute;right:0;display:flex;align-items:center;gap:6px}
+.ts-block{text-align:right}
+.ts-line{font-size:11px;color:var(--muted);line-height:1.4}
+.ts-countdown{font-size:11px;color:var(--muted2)}
+
+/* ── Buttons ── */
+.btn{padding:5px 13px;border-radius:6px;font-size:12px;cursor:pointer;border:1px solid var(--border2);background:transparent;color:var(--text);transition:background .15s;white-space:nowrap}
+.btn:hover{background:var(--bg3)}
+.btn-icon{padding:5px 8px;font-size:14px}
+.btn-primary{background:var(--blue);border-color:var(--blue);color:#fff}
+.btn-primary:hover{background:#2563eb}
+.btn-danger{border-color:rgba(239,68,68,.4);color:var(--red)}
+.btn-danger:hover{background:rgba(239,68,68,.08)}
+
+/* ── Stats ── */
+.stats{display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin-bottom:16px}
+@media(max-width:700px){.stats{grid-template-columns:repeat(2,1fr)}}
+.stat{background:var(--bg2);border:1px solid var(--border);border-radius:var(--r);padding:14px 16px}
+.stat .lbl{font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.06em;margin-bottom:6px}
+.stat .val{font-size:26px;font-weight:600;line-height:1}
+.stat .sub{font-size:11px;color:var(--muted);margin-top:4px}
+
+/* ── Layout ── */
+.grid2{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:12px}
+@media(max-width:900px){.grid2{grid-template-columns:1fr}}
+.grid3{display:grid;grid-template-columns:1fr 1fr 1fr;gap:12px;margin-bottom:12px}
+@media(max-width:1100px){.grid3{grid-template-columns:1fr 1fr}}
+@media(max-width:700px){.grid3{grid-template-columns:1fr}}
+.card{background:var(--bg2);border:1px solid var(--border);border-radius:var(--r);padding:16px;margin-bottom:12px}
+.card:last-child{margin-bottom:0}
+.card-head{display:flex;align-items:center;justify-content:space-between;margin-bottom:12px}
+.card-title{font-size:12px;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:.06em}
+
+/* ── Tabs ── */
+.tabs{display:flex;gap:4px;margin-bottom:12px;flex-wrap:wrap}
+.tab{padding:4px 12px;border-radius:6px;font-size:12px;cursor:pointer;border:1px solid transparent;background:transparent;color:var(--muted)}
+.tab.active{background:var(--bg3);border-color:var(--border2);color:var(--text)}
+
+/* ── Badges ── */
+.badge{display:inline-flex;align-items:center;padding:2px 8px;border-radius:99px;font-size:11px;font-weight:600}
+.b-ok{background:rgba(34,197,94,.15);color:var(--green)}
+.b-warn{background:rgba(234,179,8,.15);color:var(--yellow)}
+.b-err{background:rgba(239,68,68,.15);color:var(--red)}
+.b-off{background:rgba(100,116,139,.15);color:var(--muted)}
+.b-info{background:rgba(59,130,246,.15);color:var(--blue)}
+
+/* ── Device rows ── */
+.row{display:flex;align-items:center;justify-content:space-between;padding:8px 0;border-bottom:1px solid var(--border);gap:8px;cursor:pointer;transition:all .12s;border-radius:4px}
+.row:last-child{border-bottom:none}
+.row:hover{background:var(--bg3);padding-left:6px;padding-right:6px}
+.row.nc{cursor:default}.row.nc:hover{background:transparent;padding-left:0;padding-right:0}
+.row-left{display:flex;align-items:center;gap:8px;min-width:0}
+.dot{width:7px;height:7px;border-radius:50%;flex-shrink:0}
+.dot-ok{background:var(--green)}.dot-off{background:var(--muted)}.dot-warn{background:var(--yellow)}
+.dev-icon{width:32px;height:32px;border-radius:8px;background:transparent;display:flex;align-items:center;justify-content:center;font-size:16px;flex-shrink:0;overflow:hidden}
+.name{font-size:13px;font-weight:500;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:160px}
+.sub2{font-size:11px;color:var(--muted);margin-top:1px}
+.pill{font-size:10px;padding:1px 5px;border-radius:4px;margin-left:3px;vertical-align:middle}
+.pill-tg{background:rgba(59,130,246,.2);color:var(--blue)}
+.pill-chart{background:rgba(168,85,247,.2);color:#a855f7}
+
+
+
+/* ── Battery bars ── */
+.bat-wrap{display:flex;align-items:center;gap:8px;min-width:140px}
+.bat-bg{flex:1;height:5px;background:var(--bg3);border-radius:3px}
+.bat-fill{height:5px;border-radius:3px;transition:width .5s}
+
+/* ── Chart builder ── */
+.chart-builder{background:var(--bg2);border:1px solid var(--border);border-radius:var(--r);padding:16px;margin-bottom:12px}
+.chart-builder-head{display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px;margin-bottom:8px}
+.sel-chips{display:flex;flex-wrap:wrap;gap:6px;min-height:28px;align-items:center}
+.sch{display:inline-flex;align-items:center;gap:5px;padding:4px 10px 4px 8px;border-radius:20px;font-size:12px;border:1px solid var(--border2);background:var(--bg3)}
+.sch-dot{width:8px;height:8px;border-radius:50%;flex-shrink:0}
+.sch-x{margin-left:3px;cursor:pointer;color:var(--muted);font-size:15px;line-height:1}
+.sch-x:hover{color:var(--red)}
+.chart-empty{font-size:12px;color:var(--muted)}
+.chart-card{background:var(--bg2);border:1px solid var(--border);border-radius:var(--r);padding:16px;margin-bottom:12px}
+#charts-out{display:flex;flex-direction:column;gap:12px}
+#charts-out .chart-card{margin-bottom:0}
+.chart-card-head{display:flex;align-items:center;justify-content:space-between;margin-bottom:12px}
+.chart-box{position:relative;height:220px}
+select.ctrl,input.ctrl{background:var(--bg3);border:1px solid var(--border2);color:var(--text);border-radius:6px;padding:3px 8px;font-size:12px;cursor:pointer;color-scheme:dark}
+
+/* ── Alert icons ── */
+.nicon{width:26px;height:26px;border-radius:6px;display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:700;flex-shrink:0}
+
+/* ── Modal ── */
+.backdrop{position:fixed;inset:0;background:rgba(0,0,0,.65);z-index:1000;display:flex;align-items:center;justify-content:center;padding:16px;backdrop-filter:blur(3px)}
+.modal{background:var(--bg2);border:1px solid var(--border2);border-radius:14px;padding:24px;width:100%;max-width:460px;position:relative;max-height:90vh;overflow-y:auto}
+.modal h3{font-size:16px;font-weight:600;margin-bottom:3px;padding-right:32px}
+.msub{font-size:12px;color:var(--muted);margin-bottom:18px}
+.mclose{position:absolute;top:14px;right:14px;background:none;border:none;color:var(--muted);cursor:pointer;font-size:20px;line-height:1;padding:3px 6px}
+.msec{margin-bottom:18px}
+.msec-title{font-size:11px;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:.06em;margin-bottom:8px}
+.trow{display:flex;align-items:center;justify-content:space-between;padding:10px 12px;background:var(--bg3);border-radius:8px;margin-bottom:5px}
+.trow:last-child{margin-bottom:0}
+.tlbl{font-size:13px;font-weight:500}
+.tdesc{font-size:11px;color:var(--muted);margin-top:2px}
+.tgl{position:relative;width:38px;height:22px;flex-shrink:0}
+.tgl input{opacity:0;width:0;height:0;position:absolute}
+.tgl-t{position:absolute;inset:0;background:var(--bg4);border-radius:11px;cursor:pointer;transition:background .2s}
+.tgl-t:before{content:'';position:absolute;width:16px;height:16px;left:3px;top:3px;background:#fff;border-radius:50%;transition:transform .2s}
+.tgl input:checked+.tgl-t{background:var(--blue)}
+.tgl input:checked+.tgl-t:before{transform:translateX(16px)}
+.metric-row-wrap{background:var(--bg3);border-radius:8px;margin-bottom:6px;overflow:hidden}
+.metric-row{display:flex;align-items:center;gap:10px;padding:8px 12px;cursor:pointer}
+.metric-row:hover{background:var(--bg4)}
+.metric-row input[type=checkbox]{width:16px;height:16px;cursor:pointer;accent-color:var(--blue);flex-shrink:0}
+.metric-dot{width:10px;height:10px;border-radius:50%;flex-shrink:0}
+.metric-name{font-size:13px;flex:1}
+.metric-hint{font-size:11px;color:var(--muted);margin-top:1px}
+.metric-val{font-size:12px;color:var(--muted2);white-space:nowrap}
+.thr-row{display:flex;align-items:center;gap:4px;padding:6px 12px 8px;border-top:1px solid var(--border);flex-wrap:wrap}
+.thr-label{font-size:11px;color:var(--muted);white-space:nowrap}
+.thr-input{background:var(--bg4);border:1px solid var(--border2);color:var(--text);border-radius:5px;padding:3px 6px;font-size:12px;width:72px;text-align:center}
+.thr-input:focus{outline:none;border-color:var(--blue)}
+.thr-unit{font-size:11px;color:var(--muted2);margin-left:2px}
+.thr-tg{display:flex;align-items:center;gap:4px;font-size:11px;color:var(--muted);margin-left:auto;cursor:pointer}
+.thr-tg input{accent-color:var(--blue);cursor:pointer}
+.thr-msg-row{padding:6px 12px 10px;border-top:1px solid var(--border)}
+.thr-msg-input{width:100%;background:var(--bg4);border:1px solid var(--border2);color:var(--text);border-radius:6px;padding:6px 8px;font-size:11px;resize:vertical;font-family:inherit;line-height:1.4}
+.thr-msg-input:focus{outline:none;border-color:var(--blue)}
+.thr-msg-input::placeholder{color:var(--muted)}
+.info-row{display:flex;justify-content:space-between;padding:6px 0;font-size:12px;border-bottom:1px solid var(--border)}
+.info-row:last-child{border-bottom:none}
+.info-key{color:var(--muted)}
+.mactions{display:flex;gap:8px;justify-content:flex-end;margin-top:18px;padding-top:14px;border-top:1px solid var(--border)}
+
+/* ── Settings panel ── */
+.settings-panel{position:fixed;top:0;right:0;bottom:0;width:340px;background:var(--bg2);border-left:1px solid var(--border2);z-index:900;overflow-y:auto;padding:20px;transform:translateX(100%);transition:transform .25s ease}
+.settings-panel.open{transform:translateX(0)}
+.settings-backdrop{position:fixed;inset:0;background:rgba(0,0,0,.4);z-index:890;display:none}
+.settings-backdrop.open{display:block}
+.settings-head{display:flex;align-items:center;justify-content:space-between;margin-bottom:20px}
+.settings-head h2{font-size:15px;font-weight:600}
+.settings-sec{margin-bottom:20px}
+.settings-sec-title{font-size:11px;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:.06em;margin-bottom:10px;padding-bottom:6px;border-bottom:1px solid var(--border)}
+.srow{display:flex;align-items:center;justify-content:space-between;padding:8px 0}
+.srow-label{font-size:13px}
+.srow-desc{font-size:11px;color:var(--muted);margin-top:1px}
+.num-input{background:var(--bg3);border:1px solid var(--border2);color:var(--text);border-radius:6px;padding:4px 8px;font-size:12px;width:70px;text-align:center}
+.time-input{background:var(--bg3);border:1px solid var(--border2);color:var(--text);border-radius:6px;padding:4px 8px;font-size:12px;width:80px}
+
+/* ── Toast ── */
+.toast{position:fixed;bottom:24px;right:24px;padding:12px 20px;background:var(--bg3);border:1px solid var(--border2);border-radius:10px;font-size:13px;z-index:2000;animation:tsup .2s ease;max-width:320px;line-height:1.5}
+@keyframes tsup{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:translateY(0)}}
+.toast.ok{border-color:rgba(34,197,94,.5);color:var(--green)}
+.toast.err{border-color:rgba(239,68,68,.5);color:var(--red)}
+.loader{text-align:center;color:var(--muted);padding:24px;font-size:13px}
+.show-more{text-align:center;padding:8px;font-size:12px;color:var(--blue);cursor:pointer;border-top:1px solid var(--border)}
+.show-more:hover{background:var(--bg3)}
+.errmsg{color:var(--red);padding:12px;font-size:13px;text-align:center}
+
+/* ── Device offline timeout input ── */
+.off-input{background:var(--bg3);border:1px solid var(--border2);color:var(--text);border-radius:5px;padding:2px 6px;font-size:11px;width:54px;text-align:center}
+</style>
+</head>
+<body>
+<div class="app">
+
+<!-- ── Header ── -->
+<div class="header">
+  <button class="hdr-back" onclick="history.back()" title="Назад">← Назад</button>
+  <div class="hdr-center">
+    <div class="hdr-title">Home Assistant Monitor</div>
+    <div class="hdr-live"><span class="live-dot"></span>Live</div>
+  </div>
+  <div class="hdr-right">
+    <div class="ts-block">
+      <div class="ts-line" id="ts">—</div>
+      <div class="ts-countdown" id="ts-cd">—</div>
+    </div>
+    <button class="btn" onclick="loadAll()">↻</button>
+    <button class="btn btn-icon" onclick="openSettings()" title="Настройки">⚙️</button>
+  </div>
+</div>
+
+<!-- ── Stats ── -->
+<div class="stats">
+  <div class="stat"><div class="lbl">Устройств</div><div class="val" id="s-total">—</div><div class="sub">Zigbee сеть</div></div>
+  <div class="stat"><div class="lbl">Онлайн</div><div class="val" style="color:var(--green)" id="s-online">—</div><div class="sub" id="s-opct">—</div></div>
+  <div class="stat"><div class="lbl">Батарея ↓</div><div class="val" style="color:var(--yellow)" id="s-bat">—</div><div class="sub" id="s-bthr">—</div></div>
+  <div class="stat"><div class="lbl">Тревог 24ч</div><div class="val" style="color:var(--red)" id="s-alerts">—</div><div class="sub">уведомлений</div></div>
+</div>
+
+<!-- ── Devices + Batteries + Energy ── -->
+<div class="grid3" id="main-grid">
+  <div class="card" style="margin-bottom:0">
+    <div class="card-head">
+      <div class="card-title">Zigbee устройства</div>
+      <span style="font-size:11px;color:var(--muted)">нажми для настройки</span>
+    </div>
+    <div class="tabs">
+      <button class="tab active" onclick="fltDev('all',this)">Все</button>
+      <button class="tab" onclick="fltDev('online',this)">Онлайн</button>
+      <button class="tab" onclick="fltDev('offline',this)">Офлайн</button>
+    </div>
+    <div id="dev-list"><div class="loader">Загрузка…</div></div>
+  </div>
+  <div class="card" style="margin-bottom:0">
+    <div class="card-head">
+      <div class="card-title">Заряд батарей</div>
+      <span style="font-size:11px;color:var(--muted)">нажми для графика</span>
+    </div>
+    <div id="bat-list"><div class="loader">Загрузка…</div></div>
+  </div>
+  <div class="card" id="energy-card" style="margin-bottom:0;display:none">
+    <div class="card-head">
+      <div class="card-title">⚡ Токопотребление</div>
+      <span style="font-size:11px;color:var(--muted)">нажми для графика</span>
+    </div>
+    <div id="energy-list"></div>
+  </div>
+</div>
+
+<!-- ── Chart builder ── -->
+<div class="chart-builder">
+  <div class="chart-builder-head" style="flex-wrap:wrap;gap:8px">
+    <div>
+      <div class="card-title">Конструктор графиков</div>
+      <div style="font-size:11px;color:var(--muted);margin-top:3px">Нажми на устройство → выбери метрики ☑</div>
+    </div>
+    <div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap">
+      <select class="ctrl" id="chart-mode" onchange="onChartModeChange()">
+        <option value="hours">Период</option>
+        <option value="range">Диапазон дат</option>
+      </select>
+      <div id="chart-period-ctl">
+        <select class="ctrl" id="chart-hours" onchange="rebuildCharts()">
+          <option value="3">3 часа</option>
+          <option value="6">6 часов</option>
+          <option value="24" selected>24 часа</option>
+          <option value="72">3 дня</option>
+          <option value="168">7 дней</option>
+          <option value="720">30 дней</option>
+        </select>
+      </div>
+      <div id="chart-range-ctl" style="display:none;align-items:center;gap:4px;flex-wrap:wrap">
+        <input type="datetime-local" id="chart-from" class="ctrl" onchange="rebuildCharts()">
+        <span style="font-size:11px;color:var(--muted)">—</span>
+        <input type="datetime-local" id="chart-to" class="ctrl" onchange="rebuildCharts()">
+      </div>
+    </div>
+  </div>
+  <div class="sel-chips" id="sel-chips">
+    <span class="chart-empty">Нет выбранных метрик</span>
+  </div>
+</div>
+<div id="charts-out"></div>
+
+<!-- ── Alerts ── -->
+<div class="card">
+  <div class="card-head"><div class="card-title">История уведомлений</div></div>
+  <div class="tabs">
+    <button class="tab active" onclick="fltAlert('all',this)">Все</button>
+    <button class="tab" onclick="fltAlert('err',this)">Ошибки</button>
+    <button class="tab" onclick="fltAlert('warn',this)">Предупреждения</button>
+  </div>
+  <div id="alert-list"><div class="loader">Загрузка…</div></div>
+</div>
+</div><!-- .app -->
+
+<!-- ── Device Modal ── -->
+<div id="modal" class="backdrop" style="display:none" onclick="if(event.target===this)closeModal()">
+  <div class="modal">
+    <button class="mclose" onclick="closeModal()">✕</button>
+    <h3 id="m-name">—</h3>
+    <div class="msub" id="m-sub">—</div>
+    <div style="display:flex;align-items:center;gap:8px;margin-bottom:12px">
+      <div id="m-img-preview" style="width:48px;height:48px;border-radius:8px;background:var(--bg3);display:flex;align-items:center;justify-content:center;font-size:24px;overflow:hidden;flex-shrink:0"></div>
+      <div style="flex:1">
+        <div style="font-size:12px;color:var(--muted);margin-bottom:4px">Картинка устройства</div>
+        <label class="btn" style="cursor:pointer;font-size:11px">
+          📁 Загрузить
+          <input type="file" accept="image/*" style="display:none" onchange="uploadDevImg(this)">
+        </label>
+        <button class="btn" style="font-size:11px;margin-left:4px;color:var(--muted)" onclick="clearDevImg()" id="m-img-clear" style="display:none">✕ Убрать</button>
+      </div>
+    </div>
+
+    <div class="msec">
+      <div class="msec-title">Уведомления</div>
+
+
+      <div class="trow" style="margin-top:4px">
+        <div><div class="tlbl">Офлайн</div><div class="tdesc">Уведомлять при потере связи</div></div>
+        <label class="tgl"><input type="checkbox" id="m-off" onchange="saveNotify()"><span class="tgl-t"></span></label>
+      </div>
+      <div class="trow">
+        <div><div class="tlbl">Порог офлайн (мин)</div><div class="tdesc">Считать офлайн через N минут тишины</div></div>
+        <input class="off-input" type="number" id="m-off-min" min="5" max="1440" value="180" onchange="saveNotify()">
+      </div>
+    </div>
+
+    <div class="msec">
+      <div class="msec-title">Метрики для графиков</div>
+      <div id="m-metrics"><div class="loader" style="padding:10px">Сканирование…</div></div>
+    </div>
+
+    <div class="msec">
+      <div class="msec-title">⚡ Токопотребление</div>
+      <div style="font-size:11px;color:var(--muted);margin-bottom:8px">Добавить метрики устройства в раздел Токопотребление на главной</div>
+      <div id="m-energy-metrics"></div>
+    </div>
+
+    <div class="msec">
+      <div class="msec-title">Информация</div>
+      <div id="m-info"></div>
+    </div>
+
+    <div class="mactions">
+      <button class="btn btn-danger" onclick="tgTestDevice()">📨 Тест уведомления</button>
+      <button class="btn btn-primary" onclick="closeModal()">Готово</button>
+    </div>
+  </div>
+</div>
+
+<!-- ── Battery Chart Modal ── -->
+<div id="bat-modal" class="backdrop" style="display:none" onclick="if(event.target===this)closeBatModal()">
+  <div class="modal" style="max-width:560px">
+    <button class="mclose" onclick="closeBatModal()">✕</button>
+    <h3 id="bm-name">—</h3>
+    <div class="msub" id="bm-sub">—</div>
+    <!-- Stats row -->
+    <div style="display:flex;gap:12px;margin-bottom:16px;flex-wrap:wrap">
+      <div style="flex:1;min-width:80px;background:var(--bg3);border-radius:8px;padding:10px 14px;text-align:center">
+        <div style="font-size:11px;color:var(--muted);margin-bottom:4px">Сейчас</div>
+        <div style="font-size:24px;font-weight:700" id="bm-cur">—</div>
+      </div>
+      <div style="flex:1;min-width:80px;background:var(--bg3);border-radius:8px;padding:10px 14px;text-align:center">
+        <div style="font-size:11px;color:var(--muted);margin-bottom:4px">Мин за период</div>
+        <div style="font-size:24px;font-weight:700;color:var(--red)" id="bm-min">—</div>
+      </div>
+      <div style="flex:1;min-width:80px;background:var(--bg3);border-radius:8px;padding:10px 14px;text-align:center">
+        <div style="font-size:11px;color:var(--muted);margin-bottom:4px">Макс за период</div>
+        <div style="font-size:24px;font-weight:700;color:var(--green)" id="bm-max">—</div>
+      </div>
+      <div style="flex:1;min-width:80px;background:var(--bg3);border-radius:8px;padding:10px 14px;text-align:center">
+        <div style="font-size:11px;color:var(--muted);margin-bottom:4px">Последний раз</div>
+        <div style="font-size:13px;font-weight:600" id="bm-last">—</div>
+      </div>
+    </div>
+    <!-- Period selector -->
+    <div style="display:flex;align-items:center;gap:8px;margin-bottom:12px">
+      <span style="font-size:12px;color:var(--muted)">Период:</span>
+      <select class="ctrl" id="bm-hours" onchange="loadBatChart()">
+        <option value="24">24 часа</option>
+        <option value="72">3 дня</option>
+        <option value="168">7 дней</option>
+        <option value="720">30 дней</option>
+      </select>
+    </div>
+    <!-- Chart -->
+    <div style="position:relative;height:200px;margin-bottom:16px">
+      <canvas id="bm-chart"></canvas>
+      <div id="bm-nodata" style="display:none;position:absolute;inset:0;display:flex;align-items:center;justify-content:center;color:var(--muted);font-size:13px">Нет данных за период</div>
+    </div>
+    <div class="mactions">
+      <button class="btn btn-primary" onclick="closeBatModal()">Закрыть</button>
+    </div>
+  </div>
+</div>
+
+<!-- ── Energy Chart Modal ── -->
+<div id="ec-modal" class="backdrop" style="display:none" onclick="if(event.target===this)closeEcModal()">
+  <div class="modal" style="max-width:600px">
+    <button class="mclose" onclick="closeEcModal()">✕</button>
+    <h3 id="ec-m-name">—</h3>
+    <div class="msub" id="ec-m-sub">—</div>
+    <!-- Stats row -->
+    <div style="display:flex;gap:10px;margin-bottom:16px;flex-wrap:wrap">
+      <div style="flex:1;min-width:70px;background:var(--bg3);border-radius:8px;padding:10px 12px;text-align:center">
+        <div style="font-size:11px;color:var(--muted);margin-bottom:3px">Сейчас</div>
+        <div style="font-size:22px;font-weight:700" id="ec-m-cur">—</div>
+      </div>
+      <div style="flex:1;min-width:70px;background:var(--bg3);border-radius:8px;padding:10px 12px;text-align:center">
+        <div style="font-size:11px;color:var(--muted);margin-bottom:3px">Среднее</div>
+        <div style="font-size:22px;font-weight:700;color:var(--blue)" id="ec-m-avg">—</div>
+      </div>
+      <div style="flex:1;min-width:70px;background:var(--bg3);border-radius:8px;padding:10px 12px;text-align:center">
+        <div style="font-size:11px;color:var(--muted);margin-bottom:3px">Макс</div>
+        <div style="font-size:22px;font-weight:700;color:var(--red)" id="ec-m-max">—</div>
+      </div>
+      <div style="flex:1;min-width:70px;background:var(--bg3);border-radius:8px;padding:10px 12px;text-align:center">
+        <div style="font-size:11px;color:var(--muted);margin-bottom:3px">Мин</div>
+        <div style="font-size:22px;font-weight:700;color:var(--green)" id="ec-m-min">—</div>
+      </div>
+    </div>
+    <!-- Period -->
+    <div style="display:flex;align-items:center;gap:8px;margin-bottom:12px">
+      <span style="font-size:12px;color:var(--muted)">Период:</span>
+      <select class="ctrl" id="ec-m-hours" onchange="loadEcChart()">
+        <option value="3">3 часа</option>
+        <option value="6">6 часов</option>
+        <option value="24" selected>24 часа</option>
+        <option value="72">3 дня</option>
+        <option value="168">7 дней</option>
+        <option value="720">30 дней</option>
+      </select>
+    </div>
+    <!-- Chart -->
+    <div style="position:relative;height:220px;margin-bottom:16px">
+      <canvas id="ec-m-chart"></canvas>
+      <div id="ec-m-nodata" style="display:none;position:absolute;inset:0;align-items:center;justify-content:center;color:var(--muted);font-size:13px">Нет данных</div>
+    </div>
+    <div class="mactions">
+      <button class="btn btn-primary" onclick="closeEcModal()">Закрыть</button>
+    </div>
+  </div>
+</div>
+
+<!-- ── Device Manager Modal ── -->
+<div id="devmgr" class="backdrop" style="display:none" onclick="if(event.target===this)closeDevMgr()">
+  <div class="modal" style="max-width:500px">
+    <button class="mclose" onclick="closeDevMgr()">✕</button>
+    <h3>Управление устройствами</h3>
+    <div class="msub">Отметь устройства которые нужно удалить из базы данных</div>
+    <div id="devmgr-list" style="max-height:60vh;overflow-y:auto"><div class="loader">Загрузка…</div></div>
+    <div class="mactions">
+      <button class="btn" onclick="closeDevMgr()">Отмена</button>
+      <button class="btn btn-danger" onclick="deleteSelectedDevices()" id="devmgr-del-btn" disabled>🗑 Удалить выбранные</button>
+    </div>
+  </div>
+</div>
+
+<!-- ── Settings Panel ── -->
+<div class="settings-backdrop" id="settings-bd" onclick="closeSettings()"></div>
+<div class="settings-panel" id="settings-panel">
+  <div class="settings-head">
+    <h2>⚙️ Настройки</h2>
+    <button class="btn" onclick="closeSettings()">✕</button>
+  </div>
+
+  <div class="settings-sec">
+    <div class="settings-sec-title">Telegram</div>
+    <button class="btn" style="width:100%;margin-bottom:8px" onclick="tgTest()">📨 Отправить тестовое сообщение</button>
+    <div class="srow">
+      <div><div class="srow-label">Триггер: Офлайн</div><div class="srow-desc">Уведомлять при потере устройства</div></div>
+      <label class="tgl"><input type="checkbox" id="s-tg-off" onchange="saveSett()"><span class="tgl-t"></span></label>
+    </div>
+    <div class="srow">
+      <div><div class="srow-label">Триггер: Батарея</div><div class="srow-desc">Уведомлять при низком заряде</div></div>
+      <label class="tgl"><input type="checkbox" id="s-tg-bat" onchange="saveSett()"><span class="tgl-t"></span></label>
+    </div>
+    <div class="srow">
+      <div><div class="srow-label">Триггер: Снова онлайн</div><div class="srow-desc">Уведомлять при восстановлении</div></div>
+      <label class="tgl"><input type="checkbox" id="s-tg-back" onchange="saveSett()"><span class="tgl-t"></span></label>
+    </div>
+    <button class="btn" style="width:100%;margin-top:8px" onclick="checkThresholdsNow()">🔍 Проверить пороги сейчас</button>
+    <div id="thr-status" style="font-size:11px;color:var(--muted);margin-top:6px;font-family:monospace;white-space:pre-wrap"></div>
+  </div>
+
+  <div class="settings-sec">
+    <div class="settings-sec-title">MAX мессенджер</div>
+    <div style="font-size:11px;color:var(--muted);margin-bottom:8px">Настройка в config.yaml аддона: max_enabled, max_token, max_chat_id</div>
+    <button class="btn" style="width:100%;margin-bottom:8px" onclick="maxTest()">💬 Тест MAX сообщения</button>
+    <div id="max-status" style="font-size:11px;color:var(--muted);text-align:center"></div>
+  </div>
+
+  <div class="settings-sec">
+    <div class="settings-sec-title">Ежедневный отчёт</div>
+    <div class="srow">
+      <div><div class="srow-label">Включить отчёт</div><div class="srow-desc">Ежедневная сводка в Telegram</div></div>
+      <label class="tgl"><input type="checkbox" id="s-daily" onchange="saveSett()"><span class="tgl-t"></span></label>
+    </div>
+    <button class="btn" style="width:100%;margin-bottom:8px" onclick="sendDailyNow()">📋 Отправить отчёт сейчас</button>
+    <div class="srow">
+      <div class="srow-label">Время отправки</div>
+      <input class="time-input" type="time" id="s-daily-time" value="08:00" onchange="saveSett()">
+    </div>
+    <div class="srow">
+      <div><div class="srow-label">Включать: Доступность</div></div>
+      <label class="tgl"><input type="checkbox" id="s-daily-avail" onchange="saveSett()"><span class="tgl-t"></span></label>
+    </div>
+    <div class="srow">
+      <div><div class="srow-label">Включать: Батарейки</div></div>
+      <label class="tgl"><input type="checkbox" id="s-daily-bat" onchange="saveSett()"><span class="tgl-t"></span></label>
+    </div>
+  </div>
+
+  <div class="settings-sec">
+    <div class="settings-sec-title">Мониторинг</div>
+    <div class="srow">
+      <div><div class="srow-label">Таймаут офлайн (мин)</div><div class="srow-desc">По умолчанию для всех устройств</div></div>
+      <input class="num-input" type="number" id="s-off-min" min="5" max="1440" value="180" onchange="saveSett()">
+    </div>
+    <button class="btn" style="width:100%;margin-top:8px" onclick="checkThresholdsNow()">⚡ Проверить пороги сейчас</button>
+    <button class="btn" style="width:100%;margin-top:6px" onclick="openDeviceManager()">🗂 Управление устройствами в БД</button>
+  </div>
+
+  <div style="padding-top:8px;border-top:1px solid var(--border)">
+    <div style="font-size:11px;color:var(--muted)">Home Assistant Monitor v1.0</div>
+    <div style="font-size:11px;color:var(--muted);margin-top:2px">Zigbee2MQTT + HA API</div>
+  </div>
+</div>
+
+<script>
+// BASE: strip everything after the ingress token segment
+// Works for: /api/hassio_ingress/TOKEN/  and  /api/hassio_ingress/TOKEN/index.html
+(function() {
+  const p = window.location.pathname;
+  const m = p.match(/^(\/api\/hassio_ingress\/[^\/]+)/);
+  window._BASE = m ? m[1] : '';
+  console.log('[HAM] BASE =', window._BASE, '| path =', p);
+})();
+const BASE = window._BASE;
+
+// ── State ────────────────────────────────────────────────────────────────
+let _devs=[], _alerts=[], _pumps=[];
+let _notify  = JSON.parse(localStorage.getItem('smh_notify')   || '{}');
+let _selMets    = (()=>{
+  const raw=JSON.parse(localStorage.getItem('smh_sel_mets')||'[]');
+  return raw.map(m=>{
+    if(m.id&&m.ieee&&m.metric){const c=`${m.ieee}::${m.metric}`;if(m.id!==c)m.id=c;}
+    return m;
+  });
+})();
+let _thresholds  = {};  // loaded from server: {"ieee::metric": {min,max,tg}}
+let _lastValues  = {};  // cache of last known values per device ieee
+let _curBatDev   = null;
+let _devImages   = JSON.parse(localStorage.getItem('smh_dev_images')||'{}');
+let _batChart    = null;
+
+// Energy tracking: {"ieee::metric": {label, ieee, metric, color}}
+// stored in localStorage
+let _energyItems = JSON.parse(localStorage.getItem('smh_energy') || '{}');
+let _charts  = {};
+let _curDev  = null;
+let _sett    = {};
+let _devFlt  = 'all';
+let _cdTimer = null, _cdVal = 30;
+
+// ── Metric definitions ───────────────────────────────────────────────────
+const MDEF = {
+  battery:    {label:'Батарея',       unit:'%',    color:'#22c55e'},
+  linkquality:{label:'Связь (LQI)',   unit:'',     color:'#3b82f6'},
+  temperature:{label:'Температура',   unit:'°C',   color:'#f97316'},
+  humidity:   {label:'Влажность',     unit:'%',    color:'#06b6d4'},
+  voltage:    {label:'Напряжение',    unit:'В',    color:'#eab308'},
+  power:      {label:'Мощность',      unit:'Вт',   color:'#a855f7'},
+  current:    {label:'Ток',           unit:'А',    color:'#ec4899'},
+  energy:     {label:'Энергия',       unit:'кВт·ч',color:'#14b8a6'},
+};
+
+// ── API ──────────────────────────────────────────────────────────────────
+async function get(p){
+  const url=BASE+p;
+  const r=await fetch(url);
+  if(!r.ok){const t=await r.text();console.error('GET',url,'->',r.status,t);throw new Error(t||r.status);}
+  return r.json();
+}
+async function post(p,b){
+  const url=BASE+p;
+  const o={method:'POST'};
+  if(b){o.headers={'Content-Type':'application/json'};o.body=JSON.stringify(b);}
+  const r=await fetch(url,o);
+  if(!r.ok){const t=await r.text();console.error('POST',url,'->',r.status,t);throw new Error(t||r.status);}
+  return r.json();
+}
+
+// ── Toast ────────────────────────────────────────────────────────────────
+function toast(msg,type='ok'){document.querySelectorAll('.toast').forEach(t=>t.remove());const d=document.createElement('div');d.className='toast '+type;d.textContent=msg;document.body.appendChild(d);setTimeout(()=>d.remove(),3500);}
+function tryDetail(s){try{return JSON.parse(s).detail||s;}catch{return s;}}
+
+// ── Countdown timer ──────────────────────────────────────────────────────
+function startCountdown(){
+  clearInterval(_cdTimer); _cdVal=30;
+  _cdTimer=setInterval(()=>{
+    _cdVal--;
+    document.getElementById('ts-cd').textContent='Следующее обновление: '+_cdVal+'с';
+    if(_cdVal<=0){clearInterval(_cdTimer);}
+  },1000);
+}
+
+// ── Telegram ─────────────────────────────────────────────────────────────
+async function openDeviceManager(){
+  document.getElementById('devmgr').style.display='flex';
+  const list=document.getElementById('devmgr-list');
+  list.innerHTML='<div class="loader">Загрузка…</div>';
+  try{
+    // Get all devices including offline
+    const all=await get('/api/devices/all-including-offline');
+    list.innerHTML=all.map(d=>{
+      const bat=d.battery!=null?` 🔋${d.battery}%`:'';
+      const lqi=d.linkquality!=null?` 📶${d.linkquality}`:'';
+      const status=d.online?'<span class="badge b-ok">онлайн</span>':'<span class="badge b-off">офлайн</span>';
+      return `<label style="display:flex;align-items:center;gap:10px;padding:8px 4px;border-bottom:1px solid var(--border);cursor:pointer">
+        <input type="checkbox" class="devmgr-cb" value="${esc(d.ieee)}" onchange="updateDelBtn()" style="width:16px;height:16px;flex-shrink:0;accent-color:var(--red)">
+        <div style="flex:1">
+          <div style="font-size:13px;font-weight:500">${esc(d.friendly_name)}${bat}${lqi}</div>
+          <div class="sub2">${esc(d.model||d.vendor||'—')} · ${esc(d.ieee)}</div>
+        </div>
+        ${status}
+      </label>`;
+    }).join('');
+  }catch(e){list.innerHTML='<div class="errmsg">'+esc(e.message)+'</div>';}
+}
+function closeDevMgr(){document.getElementById('devmgr').style.display='none';}
+function updateDelBtn(){
+  const cnt=document.querySelectorAll('.devmgr-cb:checked').length;
+  const btn=document.getElementById('devmgr-del-btn');
+  btn.disabled=cnt===0;
+  btn.textContent=cnt>0?`🗑 Удалить выбранные (${cnt})`:'🗑 Удалить выбранные';
+}
+async function deleteSelectedDevices(){
+  const ieee=[...document.querySelectorAll('.devmgr-cb:checked')].map(cb=>cb.value);
+  if(!ieee.length)return;
+  const names=ieee.map(id=>_devs.find(d=>d.ieee===id)?.friendly_name||id);
+  if(!confirm(`Удалить ${ieee.length} устройств(а):\n${names.join(', ')}\n\nЭто также удалит историю метрик!`))return;
+  try{
+    const r=await post('/api/devices/delete-batch',{ieee_list:ieee});
+    toast(`✓ Удалено: ${r.deleted} устройств`);
+    closeDevMgr();
+    await loadDevices();
+    await loadBats();
+  }catch(e){toast('✗ '+tryDetail(e.message),'err');}
+}
+
+async function checkThresholdsNow(){
+  try{
+    const r=await post('/api/settings/check-thresholds-now');
+    toast('✓ Проверено: '+r.thresholds_checked+' порогов');
+  }catch(e){toast('✗ '+tryDetail(e.message),'err');}
+}
+
+
+async function sendDailyNow(){
+  try{
+    const r=await post('/api/settings/daily-report-now');
+    toast('✓ '+r.message);
+  }catch(e){toast('✗ '+tryDetail(e.message),'err');}
+}
+
+async function maxTest(){
+  try{
+    await post('/api/alerts/max/test');
+    toast('✓ MAX сообщение отправлено!');
+  }catch(e){
+    const detail=tryDetail(e.message);
+    document.getElementById('max-status').textContent=detail;
+    toast('✗ '+detail,'err');
+  }
+}
+
+async function tgTest(){
+  try{
+    await post('/api/alerts/telegram/test');
+    toast('✓ Тестовое сообщение отправлено!');
+  }catch(e){
+    const detail=tryDetail(e.message);
+    toast('✗ '+detail,'err');
+    // Show debug info
+    try{
+      const d=await get('/api/settings/debug');
+      console.log('[TG debug]', d);
+      if(!d.telegram_enabled) alert('Telegram выключен!\nВ настройках аддона (config.yaml) поставь:\ntelegram_enabled: true');
+      else if(!d.telegram_token_set) alert('telegram_token не задан в конфиге аддона');
+      else if(!d.telegram_chat_id_set) alert('telegram_chat_id не задан в конфиге аддона');
+    }catch(e2){}
+  }
+}
+
+// ── Summary ──────────────────────────────────────────────────────────────
+async function loadSummary(){
+  try{
+    const s=await get('/api/summary');
+    document.getElementById('s-total').textContent=s.total_devices;
+    document.getElementById('s-online').textContent=s.online_devices;
+    document.getElementById('s-bat').textContent=s.low_battery_count;
+    document.getElementById('s-alerts').textContent=s.alerts_today;
+    const pct=s.total_devices?Math.round(s.online_devices/s.total_devices*100):0;
+    document.getElementById('s-opct').textContent=pct+'% доступны';
+    document.getElementById('s-bthr').textContent='≤'+s.battery_threshold+'% порог';
+  }catch(e){console.error('summary error:',e);}
+}
+
+// ── Devices ──────────────────────────────────────────────────────────────
+async function loadDevices(){
+  try{_devs=await get('/api/devices/');renderDevs(_devFlt);}
+  catch(e){console.error('devices error:',e);document.getElementById('dev-list').innerHTML='<div class="errmsg">Ошибка: '+String(e.message||e)+'</div>';}
+}
+
+function fltDev(f,btn){
+  btn.closest('.card').querySelectorAll('.tab').forEach(b=>b.classList.remove('active'));
+  btn.classList.add('active');
+  renderDevs(f);
+}
+
+// Device type icon
+const _imgCache={};
+function devIcon(d){
+  const n=(d.friendly_name||'').toLowerCase();
+  const m=(d.model||'').toLowerCase();
+  if(/leak|water|flood/.test(n+m)) return '💧';
+  if(/avtomat|автомат|breaker|meter/.test(n)) return '⚡';
+  if(/door|window|contact/.test(n+m)) return '🚪';
+  if(/temp|humi/.test(n+m)) return '🌡️';
+  if(/motion|pir/.test(n+m)) return '👁️';
+  if(/smoke/.test(n+m)) return '🔥';
+  if(/switch|relay/.test(n+m)) return '💡';
+  if(/button/.test(n+m)) return '🔘';
+  return '📡';
+}
+// Cache of checked Z2M image URLs: model -> true/false
+const _imgOk = {};
+
+function devImg(d){
+  const icon = devIcon(d);
+  // Custom uploaded image always shows immediately
+  const custom = _devImages[d.ieee];
+  if(custom){
+    return `<span class="dev-icon-wrap">
+      <img src="${custom}" style="width:28px;height:28px;border-radius:6px;object-fit:cover"
+        onerror="this.parentElement.innerHTML='<span style=\"font-size:16px\">${icon}</span>'">
+    </span>`;
+  }
+  // Z2M image: only show if already confirmed to exist, else show emoji
+  if(d.model){
+    const model = d.model;
+    if(_imgOk[model] === true){
+      const src = `https://www.zigbee2mqtt.io/images/devices/${encodeURIComponent(model)}.png`;
+      return `<img src="${src}" style="width:28px;height:28px;border-radius:6px;object-fit:cover">`;
+    } else if(_imgOk[model] !== false){
+      // Not checked yet - show emoji, probe in background
+      const src = `https://www.zigbee2mqtt.io/images/devices/${encodeURIComponent(model)}.png`;
+      const img = new Image();
+      img.onload  = () => { _imgOk[model] = true; };
+      img.onerror = () => { _imgOk[model] = false; };
+      img.src = src;
+    }
+  }
+  return `<span style="font-size:16px">${icon}</span>`;
+}
+
+const LIST_LIMIT=10;
+let _devPage=0, _batPage=0, _ecPage=0;
+
+function listPager(pages, cur, fnName){
+  if(pages<=1) return '';
+  const btns=Array.from({length:pages},(_,i)=>
+    `<button class="btn${cur===i?' active':''}" onclick="${fnName}(${i})"
+      style="padding:3px 8px;font-size:11px;min-width:28px">${i+1}</button>`
+  ).join('');
+  return `<div style="display:flex;align-items:center;justify-content:center;gap:4px;padding:10px 0 4px;flex-wrap:wrap">${btns}</div>`;
+}
+
+function renderDevs(f){
+  if(f!==undefined){_devFlt=f;_devPage=0;}
+  let list=_devs;
+  if(_devFlt==='online')  list=_devs.filter(d=>d.online);
+  if(_devFlt==='offline') list=_devs.filter(d=>!d.online);
+  const container=document.getElementById('dev-list');
+  if(!list.length){container.innerHTML='<div class="loader">Нет устройств</div>';return;}
+  const total=list.length, pages=Math.ceil(total/LIST_LIMIT)||1;
+  if(_devPage>=pages) _devPage=pages-1;
+  const slice=list.slice(_devPage*LIST_LIMIT,(_devPage+1)*LIST_LIMIT);
+
+  // Diff-патч: если набор ieee на странице не изменился — обновляем только изменившиеся ячейки
+  const existingRows=container.querySelectorAll('.row[data-ieee]');
+  const existingIeee=[...existingRows].map(r=>r.dataset.ieee);
+  const newIeee=slice.map(d=>d.ieee);
+  const sameSet=existingIeee.length===newIeee.length&&newIeee.every((id,i)=>id===existingIeee[i]);
+
+  if(sameSet&&existingRows.length){
+    slice.forEach(d=>{
+      const row=container.querySelector(`.row[data-ieee="${CSS.escape(d.ieee)}"]`);
+      if(!row)return;
+      const dot=row.querySelector('.dot');
+      if(dot) dot.className='dot '+(d.online?'dot-ok':'dot-off');
+      const badgeEl=row.querySelector('[data-role="status-badge"]');
+      if(badgeEl){
+        const nb=d.online?'<span class="badge b-ok">онлайн</span>'
+          :`<span class="badge b-off">офлайн${d.offline_minutes?' '+d.offline_minutes+'м':''}</span>`;
+        if(badgeEl.innerHTML!==nb)badgeEl.innerHTML=nb;
+      }
+      const batEl=row.querySelector('[data-role="bat-badge"]');
+      if(batEl){
+        const nb=d.battery!=null?`<span class="badge ${d.battery<20?'b-err':d.battery<50?'b-warn':'b-ok'}" style="margin-left:2px">${d.battery}%</span>`:'';
+        if(batEl.innerHTML!==nb)batEl.innerHTML=nb;
+      }
+      const lqiEl=row.querySelector('[data-role="lqi"]');
+      if(lqiEl){const nl=d.linkquality!=null?String(d.linkquality):'';if(lqiEl.textContent!==nl)lqiEl.textContent=nl;}
+    });
+    return;
+  }
+
+  // Полный рендер при смене состава
+  container.innerHTML=slice.map(d=>devRow(d)).join('')+listPager(pages,_devPage,'devGo');
+}
+function devGo(p){_devPage=p;renderDevs();}
+
+function devRow(d){
+  const n=_notify[d.ieee]||{};
+  const cntC=_selMets.filter(m=>m.ieee===d.ieee).length;
+  const cPill=cntC?`<span class="pill pill-chart">📈${cntC}</span>`:'';
+  const badge=d.online?'<span class="badge b-ok">онлайн</span>'
+    :`<span class="badge b-off">офлайн${d.offline_minutes?' '+d.offline_minutes+'м':''}</span>`;
+  const lqi=d.linkquality!=null?`<span style="font-size:11px;color:var(--muted)">${d.linkquality}</span>`:'';
+  const batBadge=d.battery!=null?`<span class="badge ${d.battery<20?'b-err':d.battery<50?'b-warn':'b-ok'}" style="margin-left:2px">${d.battery}%</span>`:'';
+  return `<div class="row" data-ieee="${esc(d.ieee)}" onclick="openModal('${esc(d.ieee)}')">
+    <div class="row-left">
+      <div class="dot ${d.online?'dot-ok':'dot-off'}"></div>
+      <div class="dev-icon" style="overflow:hidden">${devImg(d)}</div>
+      <div>
+        <div class="name">${esc(d.friendly_name)}${cPill}</div>
+        <div class="sub2">${esc(d.model||d.vendor||'—')}</div>
+      </div>
+    </div>
+    <div style="display:flex;align-items:center;gap:6px">
+      <span data-role="lqi" style="font-size:11px;color:var(--muted)">${d.linkquality!=null?d.linkquality:''}</span>
+      <span data-role="bat-badge">${d.battery!=null?`<span class="badge ${d.battery<20?'b-err':d.battery<50?'b-warn':'b-ok'}" style="margin-left:2px">${d.battery}%</span>`:''}</span>
+      <span data-role="status-badge">${d.online?'<span class="badge b-ok">онлайн</span>':`<span class="badge b-off">офлайн${d.offline_minutes?' '+d.offline_minutes+'м':''}</span>`}</span>
+    </div>
+  </div>`;
+}
+
+
+
+// ── Modal ─────────────────────────────────────────────────────────────────
+async function openModal(ieee){
+  const d=_devs.find(x=>x.ieee===ieee);if(!d)return;
+  _curDev=d;
+  const n=_notify[ieee]||{};
+  document.getElementById('m-name').textContent=d.friendly_name;
+  // Image preview
+  const prev=document.getElementById('m-img-preview');
+  if(prev){
+    const custom=_devImages[d.ieee];
+    const z2mSrc=d.model?`https://www.zigbee2mqtt.io/images/devices/${encodeURIComponent(d.model)}.png`:'';
+    if(custom) prev.innerHTML=`<img src="${custom}" style="width:48px;height:48px;object-fit:cover;border-radius:6px">`;
+        else if(z2mSrc) prev.innerHTML=`<img src="${z2mSrc}" style="width:48px;height:48px;object-fit:cover;border-radius:6px" onerror="imgFallback(this,'${devIcon(d)}')">`;  
+    else prev.innerHTML=`<span style="font-size:24px">${devIcon(d)}</span>`;
+    const clearBtn=document.getElementById('m-img-clear');
+    if(clearBtn) clearBtn.style.display=custom?'inline':'none';
+  }
+  document.getElementById('m-sub').textContent=[d.vendor,d.model,d.device_type].filter(Boolean).join(' · ')||ieee;
+  document.getElementById('m-off').checked=n.offline!==false;
+  document.getElementById('m-off-min').value=(n.offline_minutes&&n.offline_minutes!==30?n.offline_minutes:null)||_sett.offline_check_minutes||180;
+  document.getElementById('m-info').innerHTML=[
+    ['IEEE',d.ieee],
+    ['Статус',d.online?'Онлайн':`Офлайн${d.offline_minutes?' '+d.offline_minutes+'м':''}`],
+    ['Батарея',d.battery!=null?d.battery+'%':'—'],
+    ['LQI',d.linkquality??'—'],
+    ['Последний раз',d.last_seen?new Date(d.last_seen).toLocaleString('ru-RU'):'—'],
+  ].map(([k,v])=>`<div class="info-row"><span class="info-key">${k}</span><span>${esc(String(v))}</span></div>`).join('');
+  document.getElementById('modal').style.display='flex';
+  await loadDeviceMetrics(ieee);
+}
+
+function closeModal(){document.getElementById('modal').style.display='none';_curDev=null;}
+
+async function loadDeviceMetrics(ieee){
+  const d=_devs.find(x=>x.ieee===ieee);
+  document.getElementById('m-metrics').innerHTML='<div class="loader" style="padding:10px">Сканирование…</div>';
+  try{
+    const data=await get('/api/devices/metrics-available');
+    const devData=data.find(x=>x.ieee===ieee);
+    const available=devData?.available_metrics||[];
+    if(!available.length){
+      document.getElementById('m-metrics').innerHTML='<div style="font-size:12px;color:var(--muted);padding:8px 0">Пока нет данных. Подожди первого MQTT-сообщения от устройства.</div>';
+      return;
+    }
+    // Fetch all last values in one request and cache
+    const lastV={};
+    if(d.battery!=null)     lastV.battery=d.battery;
+    if(d.linkquality!=null) lastV.linkquality=d.linkquality;
+    try{
+      const lv=await get(`/api/devices/last-values/${encodeURIComponent(ieee)}`);
+      Object.assign(lastV, Object.fromEntries(
+        Object.entries(lv).filter(([k,v])=>v!=null)
+      ));
+      _lastValues[ieee]=lastV;  // cache for test notification
+    }catch(e){}
+
+    document.getElementById('m-metrics').innerHTML=available.map(mkey=>{
+      const m=MDEF[mkey]||{label:mkey,unit:'',color:'#888'};
+      const id=`${ieee}::${mkey}`;  // format: ieee::metric
+      const checked=_selMets.some(s=>s.id===id);
+      const entityId=`sensor.${(d.friendly_name||'dev').toLowerCase().replace(/[^a-z0-9]+/g,'_')}_${mkey}`;
+      const val=lastV[mkey]!=null?lastV[mkey]:null;
+      const thr=_thresholds[id]||{};
+      // Default message templates
+      const defMsgMax=`⬆️ <b>${esc(d.friendly_name)}</b> — ${m.label} выше максимума!\nТекущее: <b>{value} ${m.unit}</b>  (порог макс: {max} ${m.unit})`;
+      const defMsgMin=`⬇️ <b>${esc(d.friendly_name)}</b> — ${m.label} ниже минимума!\nТекущее: <b>{value} ${m.unit}</b>  (порог мин: {min} ${m.unit})`;
+      const hasThr = thr.min!=null||thr.max!=null;
+      return `<div class="metric-row-wrap">
+        <label class="metric-row" onclick="event.stopPropagation()">
+          <input type="checkbox" ${checked?'checked':''} onchange="toggleMetric('${id}','${mkey}','${ieee}',this.checked)">
+          <div class="metric-dot" style="background:${m.color}"></div>
+          <div style="flex:1">
+            <div class="metric-name">${m.label}</div>
+            <div class="metric-hint">${esc(entityId)}</div>
+          </div>
+          ${val!=null?`<div class="metric-val" style="font-weight:600;color:var(--text)">${typeof val==='number'?val.toLocaleString('ru-RU',{maximumFractionDigits:2}):val} <span style="color:var(--muted);font-weight:400">${m.unit}</span></div>`:'<div class="metric-val" style="color:var(--muted)">—</div>'}
+        </label>
+        <div class="thr-row">
+          <span class="thr-label">Мин:</span>
+          <input class="thr-input" type="number" step="any" placeholder="—"
+            value="${thr.min??''}"
+            onchange="saveThr('${id}','min',this.value)"
+            onclick="event.stopPropagation()">
+          <span class="thr-label" style="margin-left:8px">Макс:</span>
+          <input class="thr-input" type="number" step="any" placeholder="—"
+            value="${thr.max??''}"
+            onchange="saveThr('${id}','max',this.value)"
+            onclick="event.stopPropagation()">
+          <span class="thr-unit">${m.unit}</span>
+          <label class="thr-tg" onclick="event.stopPropagation()">
+            <input type="checkbox" ${thr.tg!==false?'checked':''} onchange="saveThr('${id}','tg',this.checked)" onclick="event.stopPropagation()">
+            <span>TG</span>
+          </label>
+        </div>
+        ${hasThr?`<div class="thr-msg-row" onclick="event.stopPropagation()">
+          <div style="font-size:11px;color:var(--muted);margin-bottom:4px">Текст TG при превышении макс:</div>
+          <textarea class="thr-msg-input" rows="2"
+            placeholder="${defMsgMax}"
+            onchange="saveThr('${id}','msg_max',this.value)"
+            onclick="event.stopPropagation()">${esc(thr.msg_max||'')}</textarea>
+          ${thr.min!=null?`<div style="font-size:11px;color:var(--muted);margin:6px 0 4px">Текст TG при снижении ниже мин:</div>
+          <textarea class="thr-msg-input" rows="2"
+            placeholder="${defMsgMin}"
+            onchange="saveThr('${id}','msg_min',this.value)"
+            onclick="event.stopPropagation()">${esc(thr.msg_min||'')}</textarea>`:''}
+          <div style="font-size:10px;color:var(--muted);margin-top:4px">Переменные: {value} {unit} {min} {max} {name}</div>
+        </div>`:''}
+      </div>`;
+    }).join('');
+  }catch(e){
+    document.getElementById('m-metrics').innerHTML=`<div class="errmsg">Ошибка: ${esc(e.message)}</div>`;
+  }
+  // Populate energy metrics section
+  renderEnergySection(ieee);
+}
+
+function renderEnergySection(ieee){
+  const d=_devs.find(x=>x.ieee===ieee);
+  if(!d) return;
+  const el=document.getElementById('m-energy-metrics');
+  if(!el) return;
+  // Only show energy-relevant metrics
+  const ENERGY_METRICS=['power','energy','current','voltage'];
+  // Get available metrics from last known values
+  const lv=_lastValues[ieee]||{};
+  const available=ENERGY_METRICS.filter(m=>lv[m]!=null);
+  if(!available.length){
+    el.innerHTML='<div style="font-size:12px;color:var(--muted)">Нет энергетических метрик у этого устройства</div>';
+    return;
+  }
+  const MDEF_E={power:{label:'Мощность',unit:'Вт',color:'#a855f7'},energy:{label:'Энергия',unit:'кВт·ч',color:'#14b8a6'},current:{label:'Ток',unit:'А',color:'#ec4899'},voltage:{label:'Напряжение',unit:'В',color:'#eab308'}};
+  el.innerHTML=available.map(mkey=>{
+    const m=MDEF_E[mkey];
+    const ekey=`${ieee}::${mkey}`;
+    const existing=_energyItems[ekey];
+    const isAdded=!!existing;
+    const curLabel=existing?.label||`${d.friendly_name} — ${m.label}`;
+    const val=lv[mkey];
+    return `<div style="background:var(--bg3);border-radius:8px;padding:10px 12px;margin-bottom:6px">
+      <div style="display:flex;align-items:center;gap:10px">
+        <div class="metric-dot" style="background:${m.color}"></div>
+        <div style="flex:1">
+          <div style="font-size:13px;font-weight:500">${m.label}</div>
+          <div style="font-size:11px;color:var(--muted)">${val!=null?val+' '+m.unit:''}</div>
+        </div>
+        <button class="btn ${isAdded?'btn-primary':''}" style="font-size:11px;padding:3px 10px"
+          onclick="toggleEnergyItem('${ekey}','${esc(ieee)}','${mkey}','${esc(d.friendly_name)}',this)">
+          ${isAdded?'✓ В разделе':'+ Добавить'}
+        </button>
+      </div>
+      ${isAdded?`<div style="margin-top:8px;display:flex;align-items:center;gap:6px">
+        <span style="font-size:11px;color:var(--muted)">Имя:</span>
+        <input type="text" value="${esc(curLabel)}" style="flex:1;background:var(--bg4);border:1px solid var(--border2);color:var(--text);border-radius:5px;padding:3px 8px;font-size:12px"
+          onchange="renameEnergyItem('${ekey}',this.value)" oninput="this.style.borderColor='var(--blue)'">
+      </div>`:''}
+    </div>`;
+  }).join('');
+}
+
+function toggleEnergyItem(ekey, ieee, metric, devName, btn){
+  const MDEF_E={power:{label:'Мощность',unit:'Вт',color:'#a855f7'},energy:{label:'Энергия',unit:'кВт·ч',color:'#14b8a6'},current:{label:'Ток',unit:'А',color:'#ec4899'},voltage:{label:'Напряжение',unit:'В',color:'#eab308'}};
+  if(_energyItems[ekey]){
+    delete _energyItems[ekey];
+    btn.textContent='+ Добавить';
+    btn.classList.remove('btn-primary');
+    toast('Убрано из Токопотребления');
+  }else{
+    const m=MDEF_E[metric];
+    _energyItems[ekey]={ieee,metric,label:`${devName} — ${m.label}`,unit:m.unit,color:m.color};
+    btn.textContent='✓ В разделе';
+    btn.classList.add('btn-primary');
+    toast('Добавлено в Токопотребление');
+  }
+  localStorage.setItem('smh_energy',JSON.stringify(_energyItems));
+  renderEnergySection(ieee);
+  renderEnergyCard();
+}
+
+function renameEnergyItem(ekey, newLabel){
+  if(_energyItems[ekey]){
+    _energyItems[ekey].label=newLabel;
+    localStorage.setItem('smh_energy',JSON.stringify(_energyItems));
+    renderEnergyCard();
+    toast('Имя обновлено');
+  }
+}
+
+function toggleMetric(id,mkey,ieee,checked){
+  const d=_devs.find(x=>x.ieee===ieee);
+  const m=MDEF[mkey]||{label:mkey,unit:'',color:'#888'};
+  if(checked){
+    if(!_selMets.some(s=>s.id===id))
+      _selMets.push({id,ieee,metric:mkey,isPump:false,label:`${d?.friendly_name||ieee} — ${m.label}`,unit:m.unit,color:m.color||MDEF[mkey]?.color||'#888'});
+  }else{
+    _selMets=_selMets.filter(s=>s.id!==id);
+  }
+  saveSelMets();
+  renderSelChips();
+  rebuildCharts();
+  renderDevs(_devFlt);
+}
+
+function removeMetric(id){
+  _selMets=_selMets.filter(s=>s.id!==id);
+  saveSelMets();
+  renderSelChips();
+  rebuildCharts();
+  renderDevs(_devFlt);
+  // update checkbox in open modal
+  document.querySelectorAll('.metric-row input').forEach(cb=>{
+    const fn=cb.getAttribute('onchange')||'';
+    if(fn.includes(`'${id}'`)) cb.checked=false;
+  });
+}
+
+function saveSelMets(){localStorage.setItem('smh_sel_mets',JSON.stringify(_selMets));}
+
+function renderSelChips(){
+  const el=document.getElementById('sel-chips');
+  if(!_selMets.length){el.innerHTML='<span class="chart-empty">Нет выбранных метрик</span>';return;}
+  el.innerHTML=_selMets.map(m=>
+    `<div class="sch">
+      <div class="sch-dot" style="background:${m.color}"></div>
+      <span>${esc(m.label)}</span>
+      <span class="sch-x" onclick="removeMetric('${m.id}')" title="Убрать">×</span>
+    </div>`
+  ).join('');
+}
+
+async function saveThr(id, field, value){
+  if(!_thresholds[id]) _thresholds[id]={min:null,max:null,tg:true};
+  if(field==='min')      _thresholds[id].min = value===''?null:parseFloat(value);
+  else if(field==='max') _thresholds[id].max = value===''?null:parseFloat(value);
+  else if(field==='tg')  _thresholds[id].tg = !!value;
+  else if(field==='msg_max') _thresholds[id].msg_max = value.trim()||null;
+  else if(field==='msg_min') _thresholds[id].msg_min = value.trim()||null;
+  try{
+    await post('/api/settings/thresholds', {[id]: _thresholds[id]});
+    if(field==='min'||field==='max'){
+      try{ await post('/api/settings/check-thresholds-now'); } catch(e2){}
+      toast('Порог сохранён, проверка запущена');
+    } else if(field.startsWith('msg_')){
+      toast('Текст сообщения сохранён');
+    }
+  }catch(e){ console.error('saveThr',e); toast('Ошибка сохранения','err'); }
+}
+
+function openBatModal(ieee){
+  const d=_devs.find(x=>x.ieee===ieee)||{ieee,friendly_name:ieee};
+  _curBatDev={ieee, name:d.friendly_name||ieee, model:d.model||d.vendor||''};
+  document.getElementById('bm-name').textContent=_curBatDev.name;
+  document.getElementById('bm-sub').textContent=_curBatDev.model;
+  document.getElementById('bm-cur').textContent=d.battery!=null?d.battery+'%':'—';
+  const c=d.battery>=30?'var(--green)':d.battery>=15?'var(--yellow)':'var(--red)';
+  document.getElementById('bm-cur').style.color=c;
+  document.getElementById('bm-min').textContent='—';
+  document.getElementById('bm-max').textContent='—';
+  document.getElementById('bm-last').textContent=d.last_seen
+    ?new Date(d.last_seen).toLocaleString('ru-RU',{day:'2-digit',month:'2-digit',hour:'2-digit',minute:'2-digit'}):'—';
+  document.getElementById('bat-modal').style.display='flex';
+  loadBatChart();
+}
+function closeBatModal(){
+  document.getElementById('bat-modal').style.display='none';
+  if(_batChart){try{_batChart.destroy();}catch(e){} _batChart=null;}
+  _curBatDev=null;
+}
+async function loadBatChart(){
+  if(!_curBatDev) return;
+  const hours=parseInt(document.getElementById('bm-hours').value)||24;
+  const ieee=_curBatDev.ieee;
+  const nodata=document.getElementById('bm-nodata');
+  try{
+    const data=await get(`/api/devices/history/${encodeURIComponent(ieee)}?hours=${hours}&metric=battery`);
+    if(!data.length){
+      if(nodata) nodata.style.display='flex';
+      return;
+    }
+    if(nodata) nodata.style.display='none';
+    const pts=data.map(r=>{
+      const ts=r.ts.endsWith('Z')||r.ts.includes('+')?r.ts:r.ts.replace(' ','T')+'Z';
+      return {x:new Date(ts).getTime(), y:Number(r.value)};
+    }).filter(p=>!isNaN(p.y));
+    // Stats
+    const vals=pts.map(p=>p.y);
+    const mn=Math.min(...vals), mx=Math.max(...vals);
+    document.getElementById('bm-min').textContent=mn+'%';
+    document.getElementById('bm-max').textContent=mx+'%';
+    // Draw chart
+    const cv=document.getElementById('bm-chart');
+    if(_batChart){try{_batChart.destroy();}catch(e){}}
+    _batChart=new Chart(cv,{
+      type:'line',
+      data:{datasets:[{
+        label:'Батарея',data:pts,
+        borderColor:'#22c55e',backgroundColor:'rgba(34,197,94,.1)',
+        borderWidth:2,pointRadius:pts.length>100?0:3,fill:true,tension:0.3
+      }]},
+      options:{
+        responsive:true,maintainAspectRatio:false,
+        plugins:{legend:{display:false},tooltip:{
+          backgroundColor:'#1a1d27',borderColor:'rgba(255,255,255,.1)',borderWidth:1,
+          callbacks:{
+            title:items=>{const d=new Date(items[0].parsed.x);const p=n=>String(n).padStart(2,'0');return p(d.getDate())+'.'+p(d.getMonth()+1)+' '+p(d.getHours())+':'+p(d.getMinutes());},
+            label:ctx=>` ${ctx.parsed.y}%`
+          }
+        }},
+        scales:{
+          x:{type:'linear',ticks:{color:'#64748b',maxTicksLimit:hours>=24?10:8,font:{size:10},autoSkip:true,maxRotation:0,callback:v=>{const d=new Date(v);const hh=String(d.getHours()).padStart(2,'0');const mm=String(d.getMinutes()).padStart(2,'0');const dd=String(d.getDate()).padStart(2,'0');const mo=String(d.getMonth()+1).padStart(2,'0');return hours>=24?dd+'.'+mo+' '+hh+':'+mm:hh+':'+mm;}},grid:{color:'rgba(255,255,255,.04)'}},
+          y:{min:0,max:100,ticks:{color:'#64748b',font:{size:10},callback:v=>v+'%'},grid:{color:'rgba(255,255,255,.06)'}}
+        }
+      }
+    });
+  }catch(e){console.error('bat chart',e);}
+}
+
+
+function uploadDevImg(input){
+  if(!_curDev||!input.files[0]) return;
+  const reader=new FileReader();
+  reader.onload=e=>{
+    const dataUrl=e.target.result;
+    _devImages[_curDev.ieee]=dataUrl;
+    localStorage.setItem('smh_dev_images',JSON.stringify(_devImages));
+    // Update preview
+    const prev=document.getElementById('m-img-preview');
+    if(prev) prev.innerHTML=`<img src="${dataUrl}" style="width:48px;height:48px;object-fit:cover">`;
+    document.getElementById('m-img-clear').style.display='inline';
+    renderDevs(_devFlt);
+    toast('✓ Картинка сохранена');
+  };
+  reader.readAsDataURL(input.files[0]);
+}
+function clearDevImg(){
+  if(!_curDev) return;
+  delete _devImages[_curDev.ieee];
+  localStorage.setItem('smh_dev_images',JSON.stringify(_devImages));
+  const prev=document.getElementById('m-img-preview');
+  if(prev) prev.innerHTML=devIcon(_curDev);
+  document.getElementById('m-img-clear').style.display='none';
+  renderDevs(_devFlt);
+  toast('Картинка убрана');
+}
+function saveNotify(){
+  if(!_curDev)return;
+  // Preserve battery settings (managed separately in battery modal)
+  const prev=_notify[_curDev.ieee]||{};
+  _notify[_curDev.ieee]={
+    telegram: true,
+    battery:prev.battery!==false,
+    battery_threshold:prev.battery_threshold||20,
+    offline:document.getElementById('m-off').checked,
+    offline_minutes:parseInt(document.getElementById('m-off-min').value)||180,
+  };
+  localStorage.setItem('smh_notify',JSON.stringify(_notify));
+  renderDevs(_devFlt);
+}
+
+async function tgTestDevice(){
+  if(!_curDev)return;
+  const d=_curDev;
+  const n={
+    telegram: true,
+    battery:  _notify[_curDev?.ieee||'']?.battery!==false,
+    offline:  document.getElementById('m-off').checked,
+  };
+  _notify[d.ieee]={...n, offline_minutes:parseInt(document.getElementById('m-off-min').value)||180};
+  localStorage.setItem('smh_notify',JSON.stringify(_notify));
+  // Collect all current metric values from lastV cache
+  const metrics={};
+  const lv=_lastValues[d.ieee]||{};
+  Object.entries(lv).forEach(([k,v])=>{ if(v!=null) metrics[k]=v; });
+  try{
+    const notifyFull=_notify[d.ieee]||{};
+    await post('/api/alerts/telegram/device-test',{
+      ieee:d.ieee,friendly_name:d.friendly_name,
+      battery:d.battery,online:d.online,
+      offline_minutes:d.offline_minutes,linkquality:d.linkquality,
+      model:d.model,vendor:d.vendor,
+      metrics:metrics,
+      notify:{...n, battery_threshold:notifyFull.battery_threshold||20},
+    });
+    toast('✓ Тест для '+d.friendly_name+' отправлен');
+  }catch(e){toast('✗ '+tryDetail(e.message),'err');}
+}
+
+// ── Charts ───────────────────────────────────────────────────────────────
+async function diagCharts(){
+  const out=document.getElementById('charts-out');
+  out.innerHTML='<div style="padding:12px;font-size:12px;color:var(--muted2);background:var(--bg3);border-radius:8px;margin-bottom:8px;font-family:monospace;white-space:pre-wrap" id="diag-out">Диагностика...</div>';
+  const lines=[];
+  lines.push('BASE = '+BASE);
+  lines.push('URL = '+window.location.href);
+  // Test /api/health
+  try{
+    const h=await get('/api/health');
+    lines.push('✓ /api/health: '+JSON.stringify(h));
+  }catch(e){lines.push('✗ /api/health: '+e.message);}
+  // Test /api/devices/
+  try{
+    const d=await get('/api/devices/');
+    lines.push('✓ /api/devices/: '+d.length+' устройств');
+    if(d.length){lines.push('  первое: '+d[0].friendly_name+' ('+d[0].ieee+')');}
+  }catch(e){lines.push('✗ /api/devices/: '+e.message);}
+  // Test metrics-available
+  try{
+    const m=await get('/api/devices/metrics-available');
+    lines.push('✓ /api/devices/metrics-available: '+m.length+' устройств');
+    m.slice(0,3).forEach(x=>lines.push('  '+x.friendly_name+': '+JSON.stringify(x.available_metrics)));
+  }catch(e){lines.push('✗ /api/devices/metrics-available: '+e.message);}
+  // Test history for first selected metric
+  if(_selMets.length){
+    const m=_selMets[0];
+    try{
+      const h=await get(`/api/devices/history/${encodeURIComponent(m.ieee)}?hours=24&metric=${m.metric}`);
+      lines.push('✓ /api/devices/history/'+m.ieee+'?metric='+m.metric+': '+h.length+' записей');
+      if(h.length){lines.push('  первая: ts='+h[0].ts+' val='+h[0].value);}
+    }catch(e){lines.push('✗ /api/devices/history: '+e.message);}
+  }else{
+    lines.push('(метрики не выбраны — выбери устройство и поставь галочку)');
+  }
+  // Check DB stats
+  try{
+    const s=await get('/api/devices/debug/db-stats');
+    lines.push('');
+    lines.push('📊 Всего строк в device_history: '+s.total_history_rows);
+    (s.per_device||[]).slice(0,8).forEach(r=>{
+      lines.push('  '+r.friendly_name+': '+r.rows+' строк'
+        +(r.has_voltage>0?' ⚡V':'')
+        +(r.has_power>0?' W':'')
+        +(r.has_battery>0?' 🔋':'')
+        +' (последнее: '+(r.last_ts?new Date(r.last_ts).toLocaleTimeString('ru-RU'):'—')+')');
+    });
+  }catch(e){lines.push('✗ db-stats: '+e.message);}
+  // Check settings file
+  try{
+    const sd=await get('/api/settings/debug');
+    lines.push('');
+    lines.push('⚙️ Файл настроек: '+sd.sfile_path);
+    lines.push('   /data существует: '+sd.data_dir_exists+', запись: '+sd.data_dir_writable);
+    lines.push('   Файл существует: '+sd.file_exists);
+    if(sd.contents && sd.contents.thresholds){
+      const thr=sd.contents.thresholds;
+      const keys=Object.keys(thr);
+      lines.push('   Порогов сохранено: '+keys.length);
+      keys.slice(0,3).forEach(k=>lines.push('     '+k+': '+JSON.stringify(thr[k])));
+    }
+  }catch(e){lines.push('✗ settings/debug: '+e.message);}
+  document.getElementById('diag-out').textContent=lines.join('\n');
+}
+
+function onChartModeChange(){
+  const mode=document.getElementById('chart-mode').value;
+  document.getElementById('chart-period-ctl').style.display=mode==='hours'?'':'none';
+  const rangeCtl=document.getElementById('chart-range-ctl');
+  rangeCtl.style.display=mode==='range'?'flex':'none';
+  if(mode==='range' && !document.getElementById('chart-from').value){
+    const now=new Date();
+    const from=new Date(now-24*3600000);
+    document.getElementById('chart-to').value=now.toISOString().slice(0,16);
+    document.getElementById('chart-from').value=from.toISOString().slice(0,16);
+  }
+  rebuildCharts();
+}
+
+function getChartTimeParams(){
+  const mode=document.getElementById('chart-mode')?.value||'hours';
+  if(mode==='range'){
+    const from=document.getElementById('chart-from').value;
+    const to=document.getElementById('chart-to').value;
+    if(from&&to) return {mode:'range',from,to};
+  }
+  const hours=parseInt(document.getElementById('chart-hours').value)||24;
+  return {mode:'hours',hours};
+}
+
+async function rebuildCharts(){
+  Object.values(_charts).forEach(c=>{try{c.destroy();}catch(e){}});
+  _charts={};
+  const out=document.getElementById('charts-out');
+  if(!_selMets.length){out.innerHTML='';return;}
+  const tp=getChartTimeParams();
+  const hours=tp.hours||24;
+  const byKey={};
+  _selMets.forEach(m=>{if(!byKey[m.metric])byKey[m.metric]=[];byKey[m.metric].push(m);});
+  out.innerHTML=Object.keys(byKey).map(mkey=>{
+    const m=MDEF[mkey]||{label:mkey,unit:''};
+    return `<div class="chart-card" id="cc-${mkey}">
+      <div class="chart-card-head">
+        <div class="card-title">${esc(m.label)}</div>
+        <span style="font-size:11px;color:var(--muted)">${m.unit}</span>
+      </div>
+      <div class="chart-box"><canvas id="cv-${mkey}"></canvas></div>
+    </div>`;
+  }).join('');
+  for(const[mkey,mets]of Object.entries(byKey)) await drawChart(mkey,mets,tp);
+}
+
+// Stable color per device ieee — same device always gets same color
+function deviceColor(ieee){
+  const PALETTE=['#3b82f6','#22c55e','#f97316','#a855f7','#06b6d4','#eab308','#ef4444','#ec4899',
+                 '#84cc16','#f43f5e','#0ea5e9','#d946ef','#fb923c','#34d399','#818cf8','#fbbf24'];
+  let hash=0;
+  for(let i=0;i<ieee.length;i++) hash=((hash<<5)-hash+ieee.charCodeAt(i))|0;
+  return PALETTE[Math.abs(hash)%PALETTE.length];
+}
+
+async function drawChart(mkey,mets,tp){
+  const hours=(typeof tp==='object'?tp.hours:tp)||24;
+  const datasets=[];
+  for(let i=0;i<mets.length;i++){
+    const m=mets[i];
+    // If single dataset per chart: use metric color for visual variety
+    // If multiple datasets (same metric, different devices): use device color
+    const color = mets.length===1
+      ? (MDEF[mkey]?.color || deviceColor(m.ieee))
+      : deviceColor(m.ieee);
+    try{
+      let url;
+      if(typeof tp==='object'&&tp.mode==='range'&&tp.from&&tp.to){
+        url=`/api/devices/history/${encodeURIComponent(m.ieee)}?from=${encodeURIComponent(tp.from)}&to=${encodeURIComponent(tp.to)}&metric=${mkey}`;
+      }else{
+        url=`/api/devices/history/${encodeURIComponent(m.ieee)}?hours=${hours}&metric=${mkey}`;
+      }
+      console.log('[chart] fetching:', BASE+url);
+      const data=await get(url);
+      console.log('[chart]', mkey, m.ieee, '-> rows:', data.length, data.slice(0,2));
+      // Parse ts: server stores UTC naive datetimes, add Z so browser converts to local
+      const pts=data.map(r=>{
+        // Add Z if no timezone info - tells browser this is UTC
+        const tsStr=r.ts.endsWith('Z')||r.ts.includes('+') ? r.ts : r.ts.replace(' ','T')+'Z';
+        return {x:new Date(tsStr).getTime(), y:Number(r.value)};
+      }).filter(p=>!isNaN(p.y)&&!isNaN(p.x));
+      console.log('[chart] valid pts:', pts.length);
+      if(!pts.length){
+        const cc=document.getElementById('cc-'+mkey);
+        if(cc)cc.innerHTML+=`<div style="padding:4px 0;font-size:11px;color:var(--muted)">${esc(m.label)}: нет записей (${hours}ч)</div>`;
+        continue;
+      }
+      datasets.push({label:m.label,data:pts,borderColor:color,backgroundColor:color+'22',
+        borderWidth:2,pointRadius:pts.length>100?0:4,pointHoverRadius:6,fill:mets.length===1,tension:0.3});
+    }catch(e){
+      console.error('[chart] error', mkey, m.ieee, e);
+      const cc=document.getElementById('cc-'+mkey);
+      if(cc)cc.innerHTML+=`<div style="padding:4px 0;font-size:11px;color:var(--red)">Ошибка: ${esc(String(e.message))}</div>`;
+    }
+  }
+  const cv=document.getElementById('cv-'+mkey);if(!cv)return;
+  if(!datasets.length){
+    const cc=document.getElementById('cc-'+mkey);
+    if(cc){const box=cc.querySelector('.chart-box');if(box)box.style.display='none';}
+    return;
+  }
+  const munit=MDEF[mkey]?.unit||'';
+  _charts[mkey]=new Chart(cv,{
+    type:'line',data:{datasets},
+    options:{responsive:true,maintainAspectRatio:false,interaction:{mode:'index',intersect:false},
+      plugins:{
+        legend:{labels:{color:'#94a3b8',font:{size:11},boxWidth:12,padding:14}},
+        tooltip:{backgroundColor:'#1a1d27',borderColor:'rgba(255,255,255,.1)',borderWidth:1,
+          titleColor:'#e2e8f0',bodyColor:'#94a3b8',
+          callbacks:{
+            title: items => {
+              if(!items.length) return '';
+              const d=new Date(items[0].parsed.x);
+              const pad=n=>String(n).padStart(2,'0');
+              return pad(d.getDate())+'.'+pad(d.getMonth()+1)+' '+pad(d.getHours())+':'+pad(d.getMinutes());
+            },
+            label: ctx => {
+              const devName=ctx.dataset.label.split(' — ')[0];
+              return ` ${devName}: ${ctx.parsed.y} ${munit}`;
+            },
+            afterLabel: ctx => {
+              const parts=ctx.dataset.label.split(' — ');
+              return parts.length>1 ? `  (${parts.slice(1).join(' — ')})` : '';
+            }
+          }}
+      },
+      scales:{
+        x:{
+          type:'linear',
+          
+          ticks:{
+            color:'#64748b',
+            maxTicksLimit:hours>=24?10:8,autoSkip:true,maxRotation:0,
+            font:{size:10},
+            callback:v=>{const d=new Date(v);const hh=String(d.getHours()).padStart(2,'0');const mm=String(d.getMinutes()).padStart(2,'0');if((hours||0)>=24){const dd=String(d.getDate()).padStart(2,'0');const mo=String(d.getMonth()+1).padStart(2,'0');return dd+'.'+mo+' '+hh+':'+mm;}return hh+':'+mm;}
+          },
+          grid:{color:'rgba(255,255,255,.04)'}
+        },
+        y:{ticks:{color:'#64748b',font:{size:11}},grid:{color:'rgba(255,255,255,.06)'}}
+      }}
+  });
+}
+
+// ── Batteries ────────────────────────────────────────────────────────────
+async function loadBats(){
+  try{
+    const data=await get('/api/batteries/');
+    const batSorted=[...data].sort((a,b)=>(a.battery??100)-(b.battery??100));
+    const total=batSorted.length, pages=Math.ceil(total/LIST_LIMIT)||1;
+    if(_batPage>=pages) _batPage=pages-1;
+    const slice=batSorted.slice(_batPage*LIST_LIMIT,(_batPage+1)*LIST_LIMIT);
+    const batContainer=document.getElementById('bat-list');
+    // Diff-патч для батарейного списка
+    const existingBatRows=batContainer.querySelectorAll('.row[data-ieee]');
+    const existingBatIeee=[...existingBatRows].map(r=>r.dataset.ieee);
+    const newBatIeee=slice.map(d=>d.ieee);
+    const batSameSet=existingBatIeee.length===newBatIeee.length&&newBatIeee.every((id,i)=>id===existingBatIeee[i]);
+    if(batSameSet&&existingBatRows.length){
+      slice.forEach(d=>{
+        const row=batContainer.querySelector(`.row[data-ieee="${CSS.escape(d.ieee)}"]`);
+        if(!row)return;
+        const dot=row.querySelector('.dot');
+        if(dot)dot.className='dot '+(d.online?'dot-ok':'dot-off');
+        const p=d.battery??0;
+        const fill=row.querySelector('.bat-fill');
+        if(fill){fill.style.width=p+'%';fill.style.background=p>=30?'var(--green)':p>=15?'var(--yellow)':'var(--red)';}
+        const bb=row.querySelector('[data-role="bat-pct"]');
+        const cls=p>=30?'b-ok':p>=15?'b-warn':'b-err';
+        if(bb&&bb.textContent!==p+'%'){bb.textContent=p+'%';bb.className='badge '+cls;}
+      });
+      return;
+    }
+    batContainer.innerHTML=
+      slice.map(d=>{
+        const p=d.battery??0;
+        const c=p>=30?'var(--green)':p>=15?'var(--yellow)':'var(--red)';
+        const cls=p>=30?'b-ok':p>=15?'b-warn':'b-err';
+        const n=_notify[d.ieee]||{};
+        return `<div class="row" data-ieee="${esc(d.ieee)}" onclick="openBatModal('${esc(d.ieee)}')">
+          <div class="row-left">
+            <div class="dot ${d.online?'dot-ok':'dot-off'}"></div>
+            <div>
+              <div class="name">${esc(d.friendly_name)}</div>
+              <div class="sub2">${esc(d.model||d.vendor||'—')}</div>
+            </div>
+          </div>
+          <div class="bat-wrap" style="min-width:120px">
+            <div class="bat-bg"><div class="bat-fill" style="width:${p}%;background:${c}"></div></div>
+            <span class="badge ${cls}" data-role="bat-pct">${p}%</span>
+          </div>
+        </div>`;
+      }).join('')+listPager(pages,_batPage,'batGo');
+  }catch(e){document.getElementById('bat-list').innerHTML='<div class="errmsg">Ошибка</div>';}
+}
+function batGo(p){_batPage=p;loadBats();}
+function ecGo(p){_ecPage=p;renderEnergyCard();}
+
+async function loadPumps(){try{_pumps=await get('/api/pumps/');}catch(e){_pumps=[];}}
+
+// ── Alerts ───────────────────────────────────────────────────────────────
+async function loadAlerts(){
+  try{_alerts=await get('/api/alerts/?limit=50');renderAlerts('all');}
+  catch(e){document.getElementById('alert-list').innerHTML='<div class="errmsg">Ошибка</div>';}
+}
+function fltAlert(f,btn){
+  btn.closest('.card').querySelectorAll('.tab').forEach(b=>b.classList.remove('active'));
+  btn.classList.add('active');renderAlerts(f);
+}
+const ACOLS={ok:'rgba(34,197,94,.15)',warn:'rgba(234,179,8,.15)',err:'rgba(239,68,68,.15)',info:'rgba(59,130,246,.15)'};
+const ATXT={ok:'#22c55e',warn:'#eab308',err:'#ef4444',info:'#3b82f6'};
+const AICO={ok:'✓',warn:'!',err:'✕',info:'i'};
+const ALERTS_PER_PAGE=10;
+function renderAlerts(f){
+  if(f!==undefined){_alertFilter=f;_alertPage=0;}
+  let list=_alertFilter==='all'?_alerts:_alerts.filter(a=>a.level===_alertFilter);
+  const total=list.length;
+  const pages=Math.ceil(total/ALERTS_PER_PAGE)||1;
+  if(_alertPage>=pages)_alertPage=pages-1;
+  const slice=list.slice(_alertPage*ALERTS_PER_PAGE,(_alertPage+1)*ALERTS_PER_PAGE);
+  const alertContainer=document.getElementById('alert-list');
+
+  if(!total){alertContainer.innerHTML='<div class="loader">Нет уведомлений</div>';return;}
+
+  // Diff-патч: если набор id уведомлений не изменился — пропускаем перерисовку
+  const existingAlertIds=[...alertContainer.querySelectorAll('[data-alert-id]')].map(el=>el.dataset.alertId);
+  const newAlertIds=slice.map(a=>String(a.id));
+  if(existingAlertIds.length===newAlertIds.length&&newAlertIds.every((id,i)=>id===existingAlertIds[i])){
+    // Обновляем только acknowledged-кнопки если статус изменился
+    slice.forEach(a=>{
+      const row=alertContainer.querySelector(`[data-alert-id="${a.id}"]`);
+      if(!row)return;
+      const ackBtn=row.querySelector('[data-role="ack-btn"]');
+      if(a.acknowledged&&ackBtn)ackBtn.remove();
+    });
+    return;
+  }
+
+  const rows=slice.map(a=>{
+    const ts=new Date(a.ts).toLocaleString('ru-RU',{day:'2-digit',month:'2-digit',hour:'2-digit',minute:'2-digit'});
+    return `<div class="row nc" data-alert-id="${a.id}">
+      <div class="row-left" style="gap:10px">
+        <div class="nicon" style="background:${ACOLS[a.level]||ACOLS.info};color:${ATXT[a.level]||ATXT.info}">${AICO[a.level]||'•'}</div>
+        <div><div style="font-size:13px">${esc(a.message)}${a.sent_telegram?' 📨':''}</div><div class="sub2">${esc(a.category)} · ${ts}</div></div>
+      </div>
+      <div style="display:flex;gap:4px">
+        ${!a.acknowledged?`<button class="btn" data-role="ack-btn" onclick="ack(${a.id},this)" style="font-size:11px;padding:3px 8px">✓</button>`:''}
+        <button class="btn" onclick="delAlert(${a.id},this)" style="font-size:11px;padding:3px 8px;color:var(--red)">🗑</button>
+      </div>
+    </div>`;
+  }).join('');
+
+  // Pagination controls
+  const pager = pages>1 ? `<div style="display:flex;align-items:center;justify-content:center;gap:4px;padding:10px 0 4px;flex-wrap:wrap">
+    <button class="btn" onclick="alertGo(0)" ${_alertPage===0?'disabled':''} style="padding:3px 8px;font-size:11px">«</button>
+    <button class="btn" onclick="alertGo(${_alertPage-1})" ${_alertPage===0?'disabled':''} style="padding:3px 8px;font-size:11px">‹</button>
+    ${Array.from({length:pages},(_,i)=>`<button class="btn${_alertPage===i?' active':''}" onclick="alertGo(${i})" style="padding:3px 8px;font-size:11px;min-width:28px">${i+1}</button>`).join('')}
+    <button class="btn" onclick="alertGo(${_alertPage+1})" ${_alertPage===pages-1?'disabled':''} style="padding:3px 8px;font-size:11px">›</button>
+    <button class="btn" onclick="alertGo(${pages-1})" ${_alertPage===pages-1?'disabled':''} style="padding:3px 8px;font-size:11px">»</button>
+    <span style="font-size:11px;color:var(--muted);margin-left:6px">${total} всего</span>
+  </div>` : `<div style="font-size:11px;color:var(--muted);text-align:right;padding:4px 0">${total} уведомлений</div>`;
+
+  document.getElementById('alert-list').innerHTML=rows+pager;
+}
+function alertGo(p){_alertPage=p;renderAlerts();}
+async function ack(id,btn){
+  try{await post(`/api/alerts/${id}/acknowledge`);btn.closest('.row').style.opacity='.5';btn.remove();}catch(e){}
+}
+async function del(p){
+  const r=await fetch(BASE+p,{method:'DELETE'});
+  if(!r.ok){const t=await r.text();throw new Error(t||r.status);}
+  return r.json();
+}
+async function delAlert(id,btn){
+  try{await del(`/api/alerts/${id}`);btn.closest('.row').remove();}
+  catch(e){toast('Ошибка удаления','err');}
+}
+async function delAllAlerts(){
+  if(!confirm('Удалить прочитанные уведомления?'))return;
+  try{
+    await del('/api/alerts/?acknowledged_only=true');
+    toast('✓ Прочитанные уведомления удалены');
+    await loadAlerts();
+  }catch(e){toast('Ошибка','err');}
+}
+
+// ── Settings panel ───────────────────────────────────────────────────────
+function openSettings(){
+  document.getElementById('settings-panel').classList.add('open');
+  document.getElementById('settings-bd').classList.add('open');
+}
+function closeSettings(){
+  document.getElementById('settings-panel').classList.remove('open');
+  document.getElementById('settings-bd').classList.remove('open');
+}
+async function loadSett(){
+  try{
+    _sett=await get('/api/settings/');
+    document.getElementById('s-tg-off').checked=_sett.tg_trigger_offline!==false;
+    document.getElementById('s-tg-bat').checked=_sett.tg_trigger_battery!==false;
+    document.getElementById('s-tg-back').checked=!!_sett.tg_trigger_online_back;
+    document.getElementById('s-daily').checked=!!_sett.daily_status_enabled;
+    document.getElementById('s-daily-time').value=_sett.daily_status_time||'08:00';
+    document.getElementById('s-daily-avail').checked=_sett.daily_status_include_availability!==false;
+    document.getElementById('s-daily-bat').checked=_sett.daily_status_include_battery!==false;
+    document.getElementById('s-off-min').value=_sett.offline_check_minutes||180;
+  }catch(e){}
+  // also load thresholds
+  try{_thresholds=await get('/api/settings/thresholds');}catch(e){}
+}
+async function saveSett(){
+  const s={
+    tg_trigger_offline:document.getElementById('s-tg-off').checked,
+    tg_trigger_battery:document.getElementById('s-tg-bat').checked,
+    tg_trigger_online_back:document.getElementById('s-tg-back').checked,
+    daily_status_enabled:document.getElementById('s-daily').checked,
+    daily_status_time:document.getElementById('s-daily-time').value,
+    daily_status_include_availability:document.getElementById('s-daily-avail').checked,
+    daily_status_include_battery:document.getElementById('s-daily-bat').checked,
+    offline_check_minutes:parseInt(document.getElementById('s-off-min').value)||180,
+  };
+  try{_sett=await post('/api/settings/',s);toast('✓ Настройки сохранены');}
+  catch(e){toast('✗ Ошибка сохранения','err');}
+}
+
+// ── Utils ─────────────────────────────────────────────────────────────────
+function esc(s){return String(s??'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');}
+
+// ── Boot ──────────────────────────────────────────────────────────────────
+let _ecChart=null;
+let _curEcItem=null;
+
+function renderEnergyCard(){
+  const items=Object.values(_energyItems);
+  const card=document.getElementById('energy-card');
+  if(!card) return;
+  if(!items.length){
+    card.style.display='none';
+    const grid=document.getElementById('main-grid');
+    if(grid) grid.className='grid2';
+    return;
+  }
+  const grid=document.getElementById('main-grid');
+  if(grid) grid.className='grid3';
+  card.style.display='block';
+
+  const total=items.length, pages=Math.ceil(total/LIST_LIMIT)||1;
+  if(_ecPage>=pages) _ecPage=pages-1;
+  const ecSlice=items.slice(_ecPage*LIST_LIMIT,(_ecPage+1)*LIST_LIMIT);
+
+  const energyContainer=document.getElementById('energy-list');
+  // Diff-патч: если набор ключей метрик не изменился — обновляем только значения
+  const existingEcKeys=[...energyContainer.querySelectorAll('[data-ec-key]')].map(el=>el.dataset.ecKey);
+  const newEcKeys=ecSlice.map(it=>it.id||`${it.ieee}::${it.metric}`);
+  if(existingEcKeys.length===newEcKeys.length&&newEcKeys.every((k,i)=>k===existingEcKeys[i])){
+    ecSlice.forEach(it=>{
+      const key=it.id||`${it.ieee}::${it.metric}`;
+      const row=energyContainer.querySelector(`[data-ec-key="${CSS.escape(key)}"]`);
+      if(!row)return;
+      const lv=_lastValues[it.ieee]||{};
+      const val=lv[it.metric];
+      const MDEF_local=typeof MDEF!=='undefined'?MDEF:{};
+      const def=MDEF_local[it.metric]||{unit:''};
+      const valFmt=val!=null?(typeof val==='number'&&val>=100?Math.round(val):val.toFixed(2)):'—';
+      const valEl=row.querySelector('[data-role="ec-val"]');
+      if(valEl){const newV=val!=null?valFmt+' '+def.unit:'—';if(valEl.textContent!==newV)valEl.textContent=newV;}
+    });
+    return;
+  }
+  energyContainer.innerHTML=ecSlice.map(it=>{
+    const lv=_lastValues[it.ieee]||{};
+    const val=lv[it.metric];
+    const valFmt=val!=null?(typeof val==='number'&&val>=100?Math.round(val):Number(val.toFixed(2))):'—';
+    const unitSpan=val!=null?`<span style="font-size:11px;color:var(--muted);font-weight:400"> ${it.unit}</span>`:'';
+    const ecKey=it.id||`${it.ieee}::${it.metric}`;
+    return `<div class="row" data-ec-key="${esc(ecKey)}" onclick="openEcModal('${esc(it.ieee)}','${it.metric}')">
+      <div class="row-left">
+        <div style="width:10px;height:10px;border-radius:50%;background:${it.color};flex-shrink:0;margin-right:2px"></div>
+        <div>
+          <div class="name" style="max-width:220px">${esc(it.label)}</div>
+          <div class="sub2">${esc(it.ieee)}</div>
+        </div>
+      </div>
+      <div data-role="ec-val" style="font-size:16px;font-weight:600;color:var(--text);white-space:nowrap">${val!=null?valFmt+' '+(it.unit||''):'—'}</div>
+    </div>`;
+  }).join('')+listPager(pages,_ecPage,'ecGo');
+}
+
+function openEcModal(ieee, metric){
+  const ekey=`${ieee}::${metric}`;
+  const it=_energyItems[ekey];
+  if(!it) return;
+  _curEcItem=it;
+  const lv=_lastValues[ieee]||{};
+  const val=lv[metric];
+  document.getElementById('ec-m-name').textContent=it.label;
+  document.getElementById('ec-m-sub').textContent=ieee+' · '+metric;
+  document.getElementById('ec-m-cur').textContent=val!=null?val+' '+it.unit:'—';
+  document.getElementById('ec-m-cur').style.color=val!=null?'var(--text)':'var(--muted)';
+  document.getElementById('ec-m-avg').textContent='—';
+  document.getElementById('ec-m-max').textContent='—';
+  document.getElementById('ec-m-min').textContent='—';
+  document.getElementById('ec-modal').style.display='flex';
+  loadEcChart();
+}
+
+function closeEcModal(){
+  document.getElementById('ec-modal').style.display='none';
+  if(_ecChart){try{_ecChart.destroy();}catch(e){} _ecChart=null;}
+  _curEcItem=null;
+}
+
+async function loadEcChart(){
+  if(!_curEcItem) return;
+  const {ieee,metric,color,unit,label}=_curEcItem;
+  const hours=parseInt(document.getElementById('ec-m-hours').value)||24;
+  const nodata=document.getElementById('ec-m-nodata');
+  try{
+    const data=await get(`/api/devices/history/${encodeURIComponent(ieee)}?hours=${hours}&metric=${metric}`);
+    if(!data.length){
+      if(nodata){nodata.style.display='flex';}
+      return;
+    }
+    if(nodata) nodata.style.display='none';
+    const pts=data.map(r=>{
+      const ts=r.ts.endsWith('Z')||r.ts.includes('+')?r.ts:r.ts.replace(' ','T')+'Z';
+      return {x:new Date(ts).getTime(),y:Number(r.value)};
+    }).filter(p=>!isNaN(p.y));
+    // Stats
+    const vals=pts.map(p=>p.y);
+    const mn=Math.min(...vals),mx=Math.max(...vals),avg=vals.reduce((a,b)=>a+b,0)/vals.length;
+    const fmt=v=>v>=100?Math.round(v):Number(v.toFixed(2));
+    document.getElementById('ec-m-min').textContent=fmt(mn)+' '+unit;
+    document.getElementById('ec-m-max').textContent=fmt(mx)+' '+unit;
+    document.getElementById('ec-m-avg').textContent=fmt(avg)+' '+unit;
+    // Draw chart
+    const cv=document.getElementById('ec-m-chart');
+    if(_ecChart){try{_ecChart.destroy();}catch(e){}}
+    _ecChart=new Chart(cv,{
+      type:'line',
+      data:{datasets:[{label,data:pts,borderColor:color,backgroundColor:color+'22',borderWidth:2,pointRadius:pts.length>100?0:3,fill:true,tension:0.3}]},
+      options:{
+        responsive:true,maintainAspectRatio:false,
+        plugins:{legend:{display:false},tooltip:{
+          backgroundColor:'#1a1d27',borderColor:'rgba(255,255,255,.1)',borderWidth:1,
+          callbacks:{
+            title:items=>{const d=new Date(items[0].parsed.x);const p=n=>String(n).padStart(2,'0');return p(d.getDate())+'.'+p(d.getMonth()+1)+' '+p(d.getHours())+':'+p(d.getMinutes());},
+            label:ctx=>` ${fmt(ctx.parsed.y)} ${unit}`
+          }
+        }},
+        scales:{
+          x:{type:'linear',ticks:{color:'#64748b',maxTicksLimit:hours>=24?10:8,font:{size:10},autoSkip:true,maxRotation:0,callback:v=>{const d=new Date(v);const hh=String(d.getHours()).padStart(2,'0');const mm=String(d.getMinutes()).padStart(2,'0');const dd=String(d.getDate()).padStart(2,'0');const mo=String(d.getMonth()+1).padStart(2,'0');return hours>=24?dd+'.'+mo+' '+hh+':'+mm:hh+':'+mm;}},grid:{color:'rgba(255,255,255,.04)'}},
+          y:{ticks:{color:'#64748b',font:{size:10},callback:v=>fmt(v)+' '+unit},grid:{color:'rgba(255,255,255,.06)'}}
+        }
+      }
+    });
+  }catch(e){console.error('ec chart',e);}
+}
+
+function _isModalOpen(){
+  const ids=['modal','bat-modal','ec-modal','devmgr'];
+  return ids.some(id=>{const el=document.getElementById(id);return el&&el.style.display==='flex';});
+}
+
+async function loadAll(){
+  document.getElementById('ts').textContent='Обновлено: '+new Date().toLocaleTimeString('ru-RU');
+  startCountdown();
+  const modalOpen=_isModalOpen();
+  // Всегда грузим данные — но если модалка открыта, не перерисовываем списки
+  await Promise.allSettled([
+    loadSummary(),
+    modalOpen ? get('/api/devices/').then(d=>{_devs=d;}) : loadDevices(),
+    modalOpen ? get('/api/batteries/').then(d=>{if(d&&Array.isArray(d))window._batDataCache=d;}) : loadBats(),
+    loadPumps(),
+    modalOpen ? get('/api/alerts/?limit=50').then(a=>{_alerts=a;}) : loadAlerts()
+  ]);
+  await refreshEnergyValues();
+  if(!modalOpen) renderEnergyCard();
+}
+
+async function refreshEnergyValues(){
+  const ieeSet=new Set(Object.values(_energyItems).map(it=>it.ieee));
+  await Promise.allSettled([...ieeSet].map(async ieee=>{
+    try{
+      const lv=await get(`/api/devices/last-values/${encodeURIComponent(ieee)}`);
+      _lastValues[ieee]={...(_lastValues[ieee]||{}),...Object.fromEntries(Object.entries(lv).filter(([k,v])=>v!=null))};
+    }catch(e){}
+  }));
+}
+
+// Init
+renderSelChips();
+if(_selMets.length) rebuildCharts();
+loadSett();
+loadAll();
+setInterval(loadAll,30000);
+setInterval(()=>{ if(_selMets.length) rebuildCharts(); },30000);
+</script>
+</body>
+</html>
