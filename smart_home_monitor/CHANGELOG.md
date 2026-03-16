@@ -1,3 +1,18 @@
+## 1.1.0-beta7 — Provisioning через Supervisor API
+
+### Исправлено
+- 🔑 **Provisioning** — MariaDB аддон в HA принципиально блокирует root по TCP. Теперь используется официальный механизм: `bashio::services 'mysql'` возвращает реальные admin-credentials через Supervisor API — это стандартный способ для всех HA аддонов
+- 🐛 **Дублирование попыток** — исправлен баг: `(root_user, root_pw)` и `(root_user, "")` совпадали когда пароль не задан
+- 📋 **Лог стал информативнее** — теперь показывает источник credentials (Supervisor API / config)
+
+### Изменения в config.json
+- Добавлена секция `"services": ["mysql:need_run"]` — без неё Supervisor не даёт доступ к API MariaDB
+
+### Порядок подбора admin-credentials
+1. Supervisor API (`bashio::services 'mysql'`) — работает автоматически если MariaDB аддон запущен
+2. `db_root_user` + `db_root_password` из конфига — ручная настройка как fallback
+3. `db_root_user` без пароля
+
 ## 1.1.0-beta6 — Исправлено ожидание MariaDB и provisioning
 
 ### Исправлено

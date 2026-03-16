@@ -14,7 +14,7 @@ export DB_PORT=$(bashio::config 'db_port')
 export DB_NAME=$(bashio::config 'db_name')
 export DB_USER=$(bashio::config 'db_user')
 export DB_PASSWORD=$(bashio::config 'db_password')
-bashio::config.exists 'db_root_user'     && export DB_ROOT_USER=$(bashio::config 'db_root_user')         || export DB_ROOT_USER="root"
+bashio::config.exists 'db_root_user'     && export DB_ROOT_USER=$(bashio::config 'db_root_user')         || export DB_ROOT_USER=""
 bashio::config.exists 'db_root_password' && export DB_ROOT_PASSWORD=$(bashio::config 'db_root_password') || export DB_ROOT_PASSWORD=""
 
 export HA_URL=$(bashio::config 'ha_url')
@@ -39,7 +39,6 @@ bashio::log.info "MQTT: ${MQTT_HOST}:${MQTT_PORT} / ${MQTT_TOPIC_PREFIX}"
 bashio::log.info "Ingress path: ${INGRESS_PATH}"
 
 # ── Wait for MariaDB TCP port (max 60s) ───────────────────────────────────────
-# TCP check — не требует учётных данных, не зависит от прав root
 bashio::log.info "Waiting for MariaDB on ${DB_HOST}:${DB_PORT}..."
 for i in $(seq 1 60); do
   if python3 -c "
@@ -64,6 +63,17 @@ done
 
 # ── Auto-provision database and user ─────────────────────────────────────────
 bashio::log.info "Checking database provisioning..."
+
+# Получаем admin-credentials через Supervisor API (официальный способ для HA аддонов)
+# bashio::services 'mysql' даёт реальный логин/пароль от MariaDB аддона
+SUPERVISOR_MYSQL_USER=""
+SUPERVISOR_MYSQL_PASS=""
+if bashio::services.isset 'mysql' 2>/dev/null; then
+  SUPERVISOR_MYSQL_USER=$(bashio::services 'mysql' 'username' 2>/dev/null || echo "")
+  SUPERVISOR_MYSQL_PASS=$(bashio::services 'mysql' 'password' 2>/dev/null || echo "")
+  bashio::log.info "Got MariaDB credentials from Supervisor API (user: ${SUPERVISOR_MYSQL_USER})"
+fi
+
 python3 - << PYEOF
 import pymysql, sys
 
@@ -72,19 +82,36 @@ port      = int("${DB_PORT}")
 db_name   = "${DB_NAME}"
 db_user   = "${DB_USER}"
 db_pass   = "${DB_PASSWORD}"
-root_user = "${DB_ROOT_USER}"
-root_pw   = "${DB_ROOT_PASSWORD}"
+
+# Список кандидатов на admin-подключение — в порядке приоритета:
+# 1. Supervisor API (самый надёжный способ в HA)
+# 2. db_root_user + db_root_password из конфига (ручная настройка)
+# 3. db_root_user без пароля (редко, но бывает)
+candidates = []
+
+sup_user = "${SUPERVISOR_MYSQL_USER}"
+sup_pass = "${SUPERVISOR_MYSQL_PASS}"
+if sup_user:
+    candidates.append((sup_user, sup_pass, "Supervisor API"))
+
+cfg_user = "${DB_ROOT_USER}"
+cfg_pass = "${DB_ROOT_PASSWORD}"
+if cfg_user and cfg_pass:
+    candidates.append((cfg_user, cfg_pass, "config db_root_user+password"))
+if cfg_user:
+    candidates.append((cfg_user, "", "config db_root_user (no password)"))
 
 def log(msg):
     print(f"[db-init] {msg}", flush=True)
 
 def try_connect(user, password, database=None):
-    kwargs = dict(host=host, port=port, user=user, password=password, connect_timeout=3, charset="utf8mb4")
+    kwargs = dict(host=host, port=port, user=user, password=password,
+                  connect_timeout=3, charset="utf8mb4")
     if database:
         kwargs["database"] = database
     return pymysql.connect(**kwargs)
 
-# Step 1: DB уже доступна под app-пользователем — ничего делать не нужно
+# Step 1: DB уже доступна — ничего делать не нужно
 try:
     try_connect(db_user, db_pass, database=db_name)
     log(f"Database '{db_name}' already accessible as '{db_user}' — skipping provisioning")
@@ -92,27 +119,32 @@ try:
 except Exception:
     pass
 
-# Step 2: Подбираем рабочее root-подключение
-# MariaDB HA addon: root доступен без пароля с localhost через сокет,
-# но по сети (TCP) требует пароль. Пробуем оба варианта.
+if not candidates:
+    log("No admin credentials available for provisioning.")
+    log("Add 'db_root_password' to addon config, or create DB manually:")
+    log(f"  CREATE DATABASE IF NOT EXISTS \`{db_name}\` CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;")
+    log(f"  CREATE USER IF NOT EXISTS '{db_user}'@'%' IDENTIFIED BY '<db_password из конфига>';")
+    log(f"  GRANT ALL PRIVILEGES ON \`{db_name}\`.* TO '{db_user}'@'%';")
+    log(f"  FLUSH PRIVILEGES;")
+    sys.exit(1)
+
+# Step 2: Пробуем кандидатов по порядку
 root_conn = None
 tried = []
-
-for u, p in [(root_user, root_pw), (root_user, ""), ("admin", root_pw), ("admin", "")]:
-    label = f"{u}/{'***' if p else '(empty)'}"
+for u, p, source in candidates:
     try:
         root_conn = try_connect(u, p)
-        log(f"Connected as {label} — provisioning '{db_name}' for '{db_user}'")
+        log(f"Connected via {source} (user: {u}) — provisioning '{db_name}' for '{db_user}'")
         break
     except Exception as e:
-        tried.append(f"{label}: {e}")
+        tried.append(f"{source} ({u}): {e}")
 
 if root_conn is None:
     log("Could not connect with any admin credentials. Tried:")
     for t in tried:
         log(f"  {t}")
     log("Options:")
-    log("  1. Set 'db_root_password' in addon config (root password of MariaDB addon)")
+    log("  1. Set 'db_root_password' in addon config")
     log("  2. Set 'db_root_user' if your admin user is not 'root'")
     log("  3. Create DB manually in MariaDB addon terminal:")
     log(f"     CREATE DATABASE IF NOT EXISTS \`{db_name}\` CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;")
