@@ -30,8 +30,11 @@
 При первом запуске аддон создаёт базу данных и пользователя автоматически. Укажи `db_root_password` в конфигурации:
 
 ```yaml
-db_root_password: "root_пароль_от_MariaDB"
+db_root_user: root               # admin-пользователь MariaDB (обычно root)
+db_root_password: "root_пароль"  # пароль от этого пользователя
 ```
+
+> Аддон MariaDB в HA блокирует TCP-подключение root по сети. Если provisioning не работает — уточни имя admin-пользователя в настройках аддона MariaDB.
 
 После успешного создания поле можно оставить пустым — при повторных запусках шаг пропускается.
 
@@ -57,6 +60,7 @@ FLUSH PRIVILEGES;
 db_name: my_smarthome
 db_user: my_smarthome_user
 db_password: new_password
+db_root_user: root
 db_root_password: "root_пароль"
 ```
 3. Запустить аддон — новая база будет создана автоматически
