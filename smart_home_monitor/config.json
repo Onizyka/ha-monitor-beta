@@ -1,6 +1,6 @@
 {
   "name": "Home Assistant Monitor",
-  "version": "1.1.0-beta9",
+  "version": "1.1.0-beta10",
   "slug": "smart_home_monitor",
   "description": "Мониторинг Zigbee устройств, заряда батарей и уведомлений. Источник данных: Zigbee2MQTT + Home Assistant API.",
   "url": "https://github.com/Onizyka/ha-monitor",
@@ -31,8 +31,6 @@
     "db_name": "smarthome",
     "db_user": "smarthome",
     "db_password": "pass",
-    "db_root_user": "root",
-    "db_root_password": "",
     "ha_url": "http://supervisor/core",
     "ha_token": "",
     "telegram_enabled": false,
@@ -55,8 +53,6 @@
     "db_name": "str",
     "db_user": "str",
     "db_password": "password",
-    "db_root_user": "str?",
-    "db_root_password": "password?",
     "ha_url": "url",
     "ha_token": "str?",
     "telegram_enabled": "bool",
@@ -69,8 +65,5 @@
       "str?"
     ],
     "log_level": "list(debug|info|warning|error)"
-  },
-  "services": [
-    "mysql:need_run"
-  ]
+  }
 }

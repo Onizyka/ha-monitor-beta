@@ -25,46 +25,23 @@
 
 ## База данных
 
-### Автоматическое создание
-
-При первом запуске аддон создаёт базу данных и пользователя автоматически. Укажи `db_root_password` в конфигурации:
-
-```yaml
-db_root_user: root               # admin-пользователь MariaDB (обычно root)
-db_root_password: "root_пароль"  # пароль от этого пользователя
-```
-
-> Аддон MariaDB в HA блокирует TCP-подключение root по сети. Если provisioning не работает — уточни имя admin-пользователя в настройках аддона MariaDB.
-
-После успешного создания поле можно оставить пустым — при повторных запусках шаг пропускается.
-
-Если `db_root_password` не указан, аддон выведет в лог команды для ручного создания:
+База создаётся один раз вручную через терминал аддона MariaDB:
 
 ```sql
--- значения берутся из конфигурации аддона (db_name, db_user, db_password)
+mysql -u root -p
+
 CREATE DATABASE IF NOT EXISTS `smarthome` CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
-CREATE USER IF NOT EXISTS 'smarthome'@'%' IDENTIFIED BY '<db_password из конфига>';
+CREATE USER IF NOT EXISTS 'smarthome'@'%' IDENTIFIED BY '<значение db_password из конфига>';
 GRANT ALL PRIVILEGES ON `smarthome`.* TO 'smarthome'@'%';
 FLUSH PRIVILEGES;
+EXIT;
 ```
+
+Имя базы, пользователя и пароль должны совпадать с `db_name`, `db_user`, `db_password` в конфигурации.
 
 ### Смена имени базы данных
 
-Имя базы задаётся параметром `db_name` (по умолчанию `smarthome`). Менять его можно **только до первого запуска** — переименование на работающей системе не переносит данные.
-
-Для смены имени на новой установке:
-
-1. Остановить аддон
-2. Изменить параметры в конфигурации:
-```yaml
-db_name: my_smarthome
-db_user: my_smarthome_user
-db_password: new_password
-db_root_user: root
-db_root_password: "root_пароль"
-```
-3. Запустить аддон — новая база будет создана автоматически
-
+Параметр `db_name` (по умолчанию `smarthome`) задаётся до первого запуска. Для смены: остановить аддон → создать новую базу → обновить `db_name` → запустить.
 ## Настройка Telegram
 
 1. Написать [@BotFather](https://t.me/BotFather) → `/newbot` → получить токен

@@ -14,8 +14,6 @@ export DB_PORT=$(bashio::config 'db_port')
 export DB_NAME=$(bashio::config 'db_name')
 export DB_USER=$(bashio::config 'db_user')
 export DB_PASSWORD=$(bashio::config 'db_password')
-bashio::config.exists 'db_root_user'     && export DB_ROOT_USER=$(bashio::config 'db_root_user')         || export DB_ROOT_USER=""
-bashio::config.exists 'db_root_password' && export DB_ROOT_PASSWORD=$(bashio::config 'db_root_password') || export DB_ROOT_PASSWORD=""
 
 export HA_URL=$(bashio::config 'ha_url')
 
@@ -29,7 +27,6 @@ bashio::config.exists 'max_token'   && export MAX_TOKEN=$(bashio::config 'max_to
 bashio::config.exists 'max_chat_id' && export MAX_CHAT_ID=$(bashio::config 'max_chat_id') || export MAX_CHAT_ID=""
 
 export PUMP_ENTITY_IDS=$(bashio::config 'pump_entity_ids' || echo "[]")
-
 export LOG_LEVEL=$(bashio::config 'log_level')
 export INGRESS_PATH=$(bashio::addon.ingress_entry)
 
@@ -61,129 +58,43 @@ except Exception:
   sleep 1
 done
 
-# ── Auto-provision database and user ─────────────────────────────────────────
-bashio::log.info "Checking database provisioning..."
-
-# Получаем admin-credentials через Supervisor API
-# bashio::services принимает slug аддона ('mysql' — алиас для core_mariadb)
-SUPERVISOR_MYSQL_USER=""
-SUPERVISOR_MYSQL_PASS=""
-
-# Пробуем оба варианта имени: 'mysql' (алиас) и 'core_mariadb' (прямой slug)
-for _SVC_NAME in mysql core_mariadb; do
-  _SVC_USER=$(bashio::services "${_SVC_NAME}" 'username' 2>/dev/null || echo "")
-  _SVC_PASS=$(bashio::services "${_SVC_NAME}" 'password' 2>/dev/null || echo "")
-  if [ -n "${_SVC_USER}" ]; then
-    SUPERVISOR_MYSQL_USER="${_SVC_USER}"
-    SUPERVISOR_MYSQL_PASS="${_SVC_PASS}"
-    bashio::log.info "Got MariaDB credentials via Supervisor API (service: ${_SVC_NAME}, user: ${SUPERVISOR_MYSQL_USER})"
-    break
-  fi
-done
-
-if [ -z "${SUPERVISOR_MYSQL_USER}" ]; then
-  bashio::log.warning "Supervisor API returned no MariaDB credentials — will use manual db_root_user/password"
-fi
-
+# ── Check DB accessibility, print hint if not ready ──────────────────────────
+bashio::log.info "Checking database access..."
 python3 - << PYEOF
 import pymysql, sys
 
-host      = "${DB_HOST}"
-port      = int("${DB_PORT}")
-db_name   = "${DB_NAME}"
-db_user   = "${DB_USER}"
-db_pass   = "${DB_PASSWORD}"
-
-# Список кандидатов на admin-подключение — в порядке приоритета:
-# 1. Supervisor API (самый надёжный способ в HA)
-# 2. db_root_user + db_root_password из конфига (ручная настройка)
-# 3. db_root_user без пароля (редко, но бывает)
-candidates = []
-
-sup_user = "${SUPERVISOR_MYSQL_USER}"
-sup_pass = "${SUPERVISOR_MYSQL_PASS}"
-if sup_user:
-    candidates.append((sup_user, sup_pass, "Supervisor API"))
-
-cfg_user = "${DB_ROOT_USER}"
-cfg_pass = "${DB_ROOT_PASSWORD}"
-if cfg_user and cfg_pass:
-    candidates.append((cfg_user, cfg_pass, "config db_root_user+password"))
-if cfg_user:
-    candidates.append((cfg_user, "", "config db_root_user (no password)"))
+host    = "${DB_HOST}"
+port    = int("${DB_PORT}")
+db_name = "${DB_NAME}"
+db_user = "${DB_USER}"
+db_pass = "${DB_PASSWORD}"
 
 def log(msg):
     print(f"[db-init] {msg}", flush=True)
 
-def try_connect(user, password, database=None):
-    kwargs = dict(host=host, port=port, user=user, password=password,
-                  connect_timeout=3, charset="utf8mb4")
-    if database:
-        kwargs["database"] = database
-    return pymysql.connect(**kwargs)
-
-# Step 1: DB уже доступна — ничего делать не нужно
 try:
-    try_connect(db_user, db_pass, database=db_name)
-    log(f"Database '{db_name}' already accessible as '{db_user}' — skipping provisioning")
-    sys.exit(0)
-except Exception:
-    pass
-
-if not candidates:
-    log("No admin credentials available for provisioning.")
-    log("Add 'db_root_password' to addon config, or create DB manually:")
-    log(f"  CREATE DATABASE IF NOT EXISTS \`{db_name}\` CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;")
-    log(f"  CREATE USER IF NOT EXISTS '{db_user}'@'%' IDENTIFIED BY '<db_password из конфига>';")
-    log(f"  GRANT ALL PRIVILEGES ON \`{db_name}\`.* TO '{db_user}'@'%';")
-    log(f"  FLUSH PRIVILEGES;")
-    sys.exit(1)
-
-# Step 2: Пробуем кандидатов по порядку
-root_conn = None
-tried = []
-for u, p, source in candidates:
-    try:
-        root_conn = try_connect(u, p)
-        log(f"Connected via {source} (user: {u}) — provisioning '{db_name}' for '{db_user}'")
-        break
-    except Exception as e:
-        tried.append(f"{source} ({u}): {e}")
-
-if root_conn is None:
-    log("Could not connect with any admin credentials. Tried:")
-    for t in tried:
-        log(f"  {t}")
-    log("Options:")
-    log("  1. Set 'db_root_password' in addon config")
-    log("  2. Set 'db_root_user' if your admin user is not 'root'")
-    log("  3. Create DB manually in MariaDB addon terminal:")
-    log(f"     CREATE DATABASE IF NOT EXISTS \`{db_name}\` CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;")
-    log(f"     CREATE USER IF NOT EXISTS '{db_user}'@'%' IDENTIFIED BY '<db_password из конфига>';")
-    log(f"     GRANT ALL PRIVILEGES ON \`{db_name}\`.* TO '{db_user}'@'%';")
-    log(f"     FLUSH PRIVILEGES;")
-    sys.exit(1)
-
-# Step 3: Создаём БД и пользователя
-try:
-    with root_conn.cursor() as cur:
-        cur.execute(f"CREATE DATABASE IF NOT EXISTS \`{db_name}\` CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci")
-        cur.execute(f"CREATE USER IF NOT EXISTS '{db_user}'@'%' IDENTIFIED BY '{db_pass}'")
-        cur.execute(f"ALTER USER '{db_user}'@'%' IDENTIFIED BY '{db_pass}'")
-        cur.execute(f"GRANT ALL PRIVILEGES ON \`{db_name}\`.* TO '{db_user}'@'%'")
-        cur.execute("FLUSH PRIVILEGES")
-    root_conn.commit()
-    root_conn.close()
-    log(f"Provisioning complete: database='{db_name}', user='{db_user}'")
+    pymysql.connect(host=host, port=port, user=db_user, password=db_pass,
+                    database=db_name, connect_timeout=3)
+    log(f"Database '{db_name}' accessible — OK")
     sys.exit(0)
 except Exception as e:
-    log(f"Provisioning query failed: {e}")
+    log(f"Cannot connect to database '{db_name}' as '{db_user}': {e}")
+    log("")
+    log("Run these commands in the MariaDB addon terminal (Terminal & SSH → MariaDB):")
+    log(f"  mysql -u root -p")
+    log(f"  > CREATE DATABASE IF NOT EXISTS \`{db_name}\` CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;")
+    log(f"  > CREATE USER IF NOT EXISTS '{db_user}'@'%' IDENTIFIED BY '<db_password из конфига>';")
+    log(f"  > GRANT ALL PRIVILEGES ON \`{db_name}\`.* TO '{db_user}'@'%';")
+    log(f"  > FLUSH PRIVILEGES;")
+    log("")
+    log("Then restart this addon.")
     sys.exit(1)
 PYEOF
 
-DB_INIT_EXIT=$?
-if [ "$DB_INIT_EXIT" -ne 0 ]; then
-  bashio::log.warning "DB provisioning failed — will try to continue anyway"
+DB_CHECK_EXIT=$?
+if [ "$DB_CHECK_EXIT" -ne 0 ]; then
+  bashio::log.error "Database not accessible — addon will fail to start. See instructions above."
+  exit 1
 fi
 
 # ── Alembic migrations ────────────────────────────────────────────────────────
