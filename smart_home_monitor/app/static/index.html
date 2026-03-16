@@ -236,10 +236,21 @@ select.ctrl,input.ctrl{background:var(--bg3);border:1px solid var(--border2);col
       <div class="card-title">Zigbee устройства</div>
       <span style="font-size:11px;color:var(--muted)">нажми для настройки</span>
     </div>
-    <div class="tabs">
-      <button class="tab active" onclick="fltDev('all',this)">Все</button>
-      <button class="tab" onclick="fltDev('online',this)">Онлайн</button>
-      <button class="tab" onclick="fltDev('offline',this)">Офлайн</button>
+    <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:8px">
+      <div class="tabs" style="margin-bottom:0">
+        <button class="tab active" onclick="fltDev('all',this)">Все</button>
+        <button class="tab" onclick="fltDev('online',this)">Онлайн</button>
+        <button class="tab" onclick="fltDev('offline',this)">Офлайн</button>
+      </div>
+      <div style="position:relative;flex:1;min-width:140px;max-width:240px">
+        <input id="dev-search" type="text" placeholder="Поиск по имени…"
+          oninput="searchDevs(this.value)"
+          style="width:100%;background:var(--bg3);border:1px solid var(--border);border-radius:6px;
+                 padding:4px 26px 4px 10px;font-size:12px;color:var(--text);outline:none">
+        <span id="dev-search-clear" onclick="clearDevSearch()"
+          style="display:none;position:absolute;right:7px;top:50%;transform:translateY(-50%);
+                 cursor:pointer;font-size:13px;color:var(--muted);line-height:1">✕</span>
+      </div>
     </div>
     <div id="dev-list"><div class="loader">Загрузка…</div></div>
   </div>
@@ -574,6 +585,7 @@ let _charts  = {};
 let _curDev  = null;
 let _sett    = {};
 let _devFlt  = 'all';
+let _devSearch = '';
 let _cdTimer = null, _cdVal = 30;
 
 // ── Metric definitions ───────────────────────────────────────────────────
@@ -731,6 +743,22 @@ function fltDev(f,btn){
   btn.classList.add('active');
   renderDevs(f);
 }
+function searchDevs(val){
+  _devSearch=val.trim().toLowerCase();
+  _devPage=0;
+  const clr=document.getElementById('dev-search-clear');
+  if(clr)clr.style.display=_devSearch?'block':'none';
+  renderDevs();
+}
+function clearDevSearch(){
+  _devSearch='';
+  _devPage=0;
+  const inp=document.getElementById('dev-search');
+  if(inp)inp.value='';
+  const clr=document.getElementById('dev-search-clear');
+  if(clr)clr.style.display='none';
+  renderDevs();
+}
 
 // Device type icon
 const _imgCache={};
@@ -796,8 +824,18 @@ function renderDevs(f){
   let list=_devs;
   if(_devFlt==='online')  list=_devs.filter(d=>d.online);
   if(_devFlt==='offline') list=_devs.filter(d=>!d.online);
+  if(_devSearch){
+    list=list.filter(d=>(d.friendly_name||'').toLowerCase().includes(_devSearch)
+                      ||(d.model||'').toLowerCase().includes(_devSearch)
+                      ||(d.vendor||'').toLowerCase().includes(_devSearch));
+  }
   const container=document.getElementById('dev-list');
-  if(!list.length){container.innerHTML='<div class="loader">Нет устройств</div>';return;}
+  if(!list.length){
+    container.innerHTML=_devSearch
+      ?'<div class="loader">Ничего не найдено</div>'
+      :'<div class="loader">Нет устройств</div>';
+    return;
+  }
   const total=list.length, pages=Math.ceil(total/LIST_LIMIT)||1;
   if(_devPage>=pages) _devPage=pages-1;
   const slice=list.slice(_devPage*LIST_LIMIT,(_devPage+1)*LIST_LIMIT);
@@ -806,7 +844,7 @@ function renderDevs(f){
   const existingRows=container.querySelectorAll('.row[data-ieee]');
   const existingIeee=[...existingRows].map(r=>r.dataset.ieee);
   const newIeee=slice.map(d=>d.ieee);
-  const sameSet=existingIeee.length===newIeee.length&&newIeee.every((id,i)=>id===existingIeee[i]);
+  const sameSet=!_devSearch&&existingIeee.length===newIeee.length&&newIeee.every((id,i)=>id===existingIeee[i]);
 
   if(sameSet&&existingRows.length){
     slice.forEach(d=>{
