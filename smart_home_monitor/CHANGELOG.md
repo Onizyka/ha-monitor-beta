@@ -1,3 +1,14 @@
+## 1.1.0-beta9 — Исправлено имя сервиса MariaDB
+
+### Исправлено
+- 🔑 **Supervisor API**: аддон MariaDB в HA называется `core-mariadb`, его slug — `core_mariadb`. Теперь перебираются оба варианта имени: `mysql` (официальный алиас) и `core_mariadb` (прямой slug) — используется первый рабочий
+
+## 1.1.0-beta8 — Диагностика Supervisor API
+
+### Изменено
+- 🔍 Добавлено логирование в блок получения credentials: теперь в логах видно что именно возвращает `bashio::services 'mysql'` и почему provisioning не работает
+- Убрана зависимость от `bashio::services.isset` — credentials запрашиваются напрямую, результат проверяется по наличию значения
+
 ## 1.1.0-beta7 — Provisioning через Supervisor API
 
 ### Исправлено

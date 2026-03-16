@@ -64,14 +64,25 @@ done
 # ── Auto-provision database and user ─────────────────────────────────────────
 bashio::log.info "Checking database provisioning..."
 
-# Получаем admin-credentials через Supervisor API (официальный способ для HA аддонов)
-# bashio::services 'mysql' даёт реальный логин/пароль от MariaDB аддона
+# Получаем admin-credentials через Supervisor API
+# bashio::services принимает slug аддона ('mysql' — алиас для core_mariadb)
 SUPERVISOR_MYSQL_USER=""
 SUPERVISOR_MYSQL_PASS=""
-if bashio::services.isset 'mysql' 2>/dev/null; then
-  SUPERVISOR_MYSQL_USER=$(bashio::services 'mysql' 'username' 2>/dev/null || echo "")
-  SUPERVISOR_MYSQL_PASS=$(bashio::services 'mysql' 'password' 2>/dev/null || echo "")
-  bashio::log.info "Got MariaDB credentials from Supervisor API (user: ${SUPERVISOR_MYSQL_USER})"
+
+# Пробуем оба варианта имени: 'mysql' (алиас) и 'core_mariadb' (прямой slug)
+for _SVC_NAME in mysql core_mariadb; do
+  _SVC_USER=$(bashio::services "${_SVC_NAME}" 'username' 2>/dev/null || echo "")
+  _SVC_PASS=$(bashio::services "${_SVC_NAME}" 'password' 2>/dev/null || echo "")
+  if [ -n "${_SVC_USER}" ]; then
+    SUPERVISOR_MYSQL_USER="${_SVC_USER}"
+    SUPERVISOR_MYSQL_PASS="${_SVC_PASS}"
+    bashio::log.info "Got MariaDB credentials via Supervisor API (service: ${_SVC_NAME}, user: ${SUPERVISOR_MYSQL_USER})"
+    break
+  fi
+done
+
+if [ -z "${SUPERVISOR_MYSQL_USER}" ]; then
+  bashio::log.warning "Supervisor API returned no MariaDB credentials — will use manual db_root_user/password"
 fi
 
 python3 - << PYEOF
