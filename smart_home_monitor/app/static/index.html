@@ -722,7 +722,7 @@ async function loadSummary(){
 
 // ── Devices ──────────────────────────────────────────────────────────────
 async function loadDevices(){
-  try{_devs=await get('/api/devices/');renderDevs(_devFlt);}
+  try{_devs=await get('/api/devices/');renderDevs();}
   catch(e){console.error('devices error:',e);document.getElementById('dev-list').innerHTML='<div class="errmsg">Ошибка: '+String(e.message||e)+'</div>';}
 }
 
@@ -791,7 +791,8 @@ function listPager(pages, cur, fnName){
 }
 
 function renderDevs(f){
-  if(f!==undefined){_devFlt=f;_devPage=0;}
+  if(f!==undefined&&f!==_devFlt){_devFlt=f;_devPage=0;}
+  else if(f!==undefined){_devFlt=f;}
   let list=_devs;
   if(_devFlt==='online')  list=_devs.filter(d=>d.online);
   if(_devFlt==='offline') list=_devs.filter(d=>!d.online);
@@ -1515,7 +1516,7 @@ async function loadPumps(){try{_pumps=await get('/api/pumps/');}catch(e){_pumps=
 
 // ── Alerts ───────────────────────────────────────────────────────────────
 async function loadAlerts(){
-  try{_alerts=await get('/api/alerts/?limit=50');renderAlerts('all');}
+  try{_alerts=await get('/api/alerts/?limit=50');renderAlerts();}
   catch(e){document.getElementById('alert-list').innerHTML='<div class="errmsg">Ошибка</div>';}
 }
 function fltAlert(f,btn){
@@ -1527,7 +1528,8 @@ const ATXT={ok:'#22c55e',warn:'#eab308',err:'#ef4444',info:'#3b82f6'};
 const AICO={ok:'✓',warn:'!',err:'✕',info:'i'};
 const ALERTS_PER_PAGE=10;
 function renderAlerts(f){
-  if(f!==undefined){_alertFilter=f;_alertPage=0;}
+  if(f!==undefined&&f!==_alertFilter){_alertFilter=f;_alertPage=0;}
+  else if(f!==undefined){_alertFilter=f;}
   let list=_alertFilter==='all'?_alerts:_alerts.filter(a=>a.level===_alertFilter);
   const total=list.length;
   const pages=Math.ceil(total/ALERTS_PER_PAGE)||1;
