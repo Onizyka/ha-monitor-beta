@@ -549,7 +549,7 @@ select.ctrl,input.ctrl{background:var(--bg3);border:1px solid var(--border2);col
   </div>
 
   <div style="padding-top:8px;border-top:1px solid var(--border)">
-    <div style="font-size:11px;color:var(--muted)"><span id="app-version">Home Assistant Monitor v1.2.9</span></div>
+    <div style="font-size:11px;color:var(--muted)"><span id="app-version">Home Assistant Monitor v1.3.0</span></div>
     <div style="font-size:11px;color:var(--muted);margin-top:2px">Zigbee2MQTT + HA API</div>
   </div>
 </div>
@@ -601,18 +601,32 @@ let _devImages = {};
 async function loadDevImages(){
   try{
     const models=await fetch(window._BASE+'/api/devices/images-list').then(r=>r.json());
-    // Store just the model names, construct URLs fresh each time
     const serverModels = {};
     models.forEach(m=>{
       serverModels[m] = true;
       delete _imgOk[m];
-    });
-    localStorage.setItem('smh_server_models', JSON.stringify(serverModels));
-    // Update _devImages with fresh URLs using current BASE
-    models.forEach(m=>{
       _devImages[m] = BASE + `/api/devices/image/${encodeURIComponent(m)}`;
     });
+    localStorage.setItem('smh_server_models', JSON.stringify(serverModels));
+    // Patch already-rendered device icons without full re-render
+    _patchDevIcons();
   }catch(e){}
+}
+
+function _patchDevIcons(){
+  // Update dev-icon divs for devices that now have server images
+  document.querySelectorAll('#dev-list .row').forEach(row=>{
+    const ieee = row.dataset.ieee;
+    if(!ieee) return;
+    const d = _devs.find(x=>x.ieee===ieee);
+    if(!d||!d.model) return;
+    if(!_devImages[d.model]) return;
+    const iconDiv = row.querySelector('.dev-icon');
+    if(!iconDiv) return;
+    const icon = devIcon(d);
+    iconDiv.innerHTML = `<img src="${_devImages[d.model]}" style="width:28px;height:28px;border-radius:6px;object-fit:cover;display:block"
+      onerror="this.outerHTML='<span style=\"font-size:16px\">${icon}</span>'">`;
+  });
 }
 let _batChart    = null;
 
@@ -913,6 +927,8 @@ function renderDevs(f){
 
   // Полный рендер при смене состава
   container.innerHTML=slice.map(d=>devRow(d)).join('')+listPager(pages,_devPage,'devGo');
+  // Patch icons if server images already loaded
+  if(Object.keys(_devImages).length) _patchDevIcons();
 }
 function devGo(p){_devPage=p;renderDevs();}
 
