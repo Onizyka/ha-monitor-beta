@@ -134,8 +134,7 @@ async def _handle_device_state(device_name: str, payload: dict):
         result = await db.execute(
             select(Device).where(Device.friendly_name == device_name)
         )
-        # Use first() instead of scalar_one_or_none() to handle duplicate rows gracefully
-        device = result.scalars().first()
+        device = result.scalar_one_or_none()
 
         if device is None:
             device = Device(ieee=device_name, friendly_name=device_name)

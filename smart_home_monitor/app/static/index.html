@@ -549,7 +549,7 @@ select.ctrl,input.ctrl{background:var(--bg3);border:1px solid var(--border2);col
   </div>
 
   <div style="padding-top:8px;border-top:1px solid var(--border)">
-    <div style="font-size:11px;color:var(--muted)"><span id="app-version">Home Assistant Monitor v1.1.8</span></div>
+    <div style="font-size:11px;color:var(--muted)"><span id="app-version">Home Assistant Monitor v1.1.9</span></div>
     <div style="font-size:11px;color:var(--muted);margin-top:2px">Zigbee2MQTT + HA API</div>
   </div>
 </div>
@@ -578,6 +578,8 @@ let _selMets    = (()=>{
 })();
 let _thresholds  = {};  // loaded from server: {"ieee::metric": {min,max,tg}}
 let _lastValues  = {};  // cache of last known values per device ieee
+let _metricsCache = null;   // in-memory cache of metrics-available
+let _metricsCacheTs = 0;    // timestamp of last metrics-available fetch
 let _curBatDev   = null;
 let _devImages   = JSON.parse(localStorage.getItem('smh_dev_images')||'{}');
 let _batChart    = null;
@@ -780,7 +782,7 @@ function devIcon(d){
   return '📡';
 }
 // Cache of checked Z2M image URLs: model -> true/false
-const _imgOk = JSON.parse(localStorage.getItem('smh_img_ok')||'{}')
+const _imgOk = {};
 
 function devImg(d){
   const icon = devIcon(d);
@@ -802,8 +804,8 @@ function devImg(d){
       // Not checked yet - show emoji, probe in background
       const src = `https://www.zigbee2mqtt.io/images/devices/${encodeURIComponent(model)}.png`;
       const img = new Image();
-      img.onload  = () => { _imgOk[model] = true; localStorage.setItem('smh_img_ok', JSON.stringify(_imgOk)); };
-      img.onerror = () => { _imgOk[model] = false; localStorage.setItem('smh_img_ok', JSON.stringify(_imgOk)); };
+      img.onload  = () => { _imgOk[model] = true; };
+      img.onerror = () => { _imgOk[model] = false; };
       img.src = src;
     }
   }
@@ -940,21 +942,21 @@ function closeModal(){document.getElementById('modal').style.display='none';_cur
 
 async function loadDeviceMetrics(ieee){
   const d=_devs.find(x=>x.ieee===ieee);
-  document.getElementById('m-metrics').innerHTML='<div class="loader" style="padding:10px">Сканирование…</div>';
+  document.getElementById('m-metrics').innerHTML='<div class="loader" style="padding:10px">Загрузка…</div>';
   try{
-    const data=await get('/api/devices/metrics-available');
-    const devData=data.find(x=>x.ieee===ieee);
-    const available=devData?.available_metrics||[];
-    // If no history yet, infer available metrics from current device data
-    if(!available.length){
-      if(d.battery!=null)     available.push('battery');
-      if(d.linkquality!=null) available.push('linkquality');
+    // Use in-memory cache (60s TTL) — like 1.1.0, fast after first load
+    const now=Date.now();
+    if(!_metricsCache || now-_metricsCacheTs>60000){
+      _metricsCache=await get('/api/devices/metrics-available');
+      _metricsCacheTs=now;
     }
+    const devData=_metricsCache.find(x=>x.ieee===ieee);
+    const available=devData?.available_metrics||[];
     if(!available.length){
       document.getElementById('m-metrics').innerHTML='<div style="font-size:12px;color:var(--muted);padding:8px 0">Пока нет данных. Подожди первого MQTT-сообщения от устройства.</div>';
       return;
     }
-    // Fetch all last values in one request and cache
+    // Fetch last values
     const lastV={};
     if(d.battery!=null)     lastV.battery=d.battery;
     if(d.linkquality!=null) lastV.linkquality=d.linkquality;
@@ -963,7 +965,7 @@ async function loadDeviceMetrics(ieee){
       Object.assign(lastV, Object.fromEntries(
         Object.entries(lv).filter(([k,v])=>v!=null)
       ));
-      _lastValues[ieee]=lastV;  // cache for test notification
+      _lastValues[ieee]=lastV;
     }catch(e){}
 
     document.getElementById('m-metrics').innerHTML=available.map(mkey=>{
@@ -1564,7 +1566,11 @@ async function loadPumps(){try{_pumps=await get('/api/pumps/');}catch(e){_pumps=
 // ── Alerts ───────────────────────────────────────────────────────────────
 async function loadAlerts(){
   try{_alerts=await get('/api/alerts/?limit=50');renderAlerts();}
-  catch(e){document.getElementById('alert-list').innerHTML='<div class="errmsg">Ошибка</div>';}
+  catch(e){
+    // Strip HTML tags from error (e.g. 504 gateway page)
+    const msg=String(e.message||e).replace(/<[^>]+>/g,'').replace(/\s+/g,' ').trim().slice(0,80);
+    document.getElementById('alert-list').innerHTML=`<div class="errmsg">Ошибка: ${esc(msg)}</div>`;
+  }
 }
 async function clearAllAlerts(){
   if(!confirm('Удалить все уведомления?')) return;
@@ -1582,6 +1588,7 @@ async function loadAppVersion(){
   }catch(e){}
 }
 function fltAlert(f,btn){
+  if(typeof _alertFilter==='undefined') return;
   btn.closest('.card').querySelectorAll('.tab').forEach(b=>b.classList.remove('active'));
   btn.classList.add('active');renderAlerts(f);
 }
@@ -1853,6 +1860,8 @@ async function loadAll(){
     loadPumps(),
     modalOpen ? get('/api/alerts/?limit=50').then(a=>{_alerts=a;}) : loadAlerts()
   ]);
+  // Pre-warm metrics cache in background so first device open is instant
+  if(!_metricsCache) get('/api/devices/metrics-available').then(d=>{_metricsCache=d;_metricsCacheTs=Date.now();}).catch(()=>{});
   await refreshEnergyValues();
   if(!modalOpen) renderEnergyCard();
 }

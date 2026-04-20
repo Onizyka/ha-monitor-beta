@@ -23,9 +23,14 @@ async def list_alerts(
         q = q.where(Alert.category == category)
     if unacked:
         q = q.where(Alert.acknowledged == False)
-    result = await db.execute(q)
-    alerts = result.scalars().all()
-    return [_ser(a) for a in alerts]
+    try:
+        result = await db.execute(q)
+        alerts = result.scalars().all()
+        return [_ser(a) for a in alerts]
+    except Exception as e:
+        import logging
+        logging.getLogger(__name__).error("alerts list error: %s", e)
+        return []
 
 
 @router.post("/{alert_id}/acknowledge")
