@@ -549,7 +549,7 @@ select.ctrl,input.ctrl{background:var(--bg3);border:1px solid var(--border2);col
   </div>
 
   <div style="padding-top:8px;border-top:1px solid var(--border)">
-    <div style="font-size:11px;color:var(--muted)"><span id="app-version">Home Assistant Monitor v1.3.0</span></div>
+    <div style="font-size:11px;color:var(--muted)"><span id="app-version">Home Assistant Monitor v1.3.1</span></div>
     <div style="font-size:11px;color:var(--muted);margin-top:2px">Zigbee2MQTT + HA API</div>
   </div>
 </div>
@@ -838,27 +838,15 @@ const _imgOk = {};
 
 function devImg(d){
   const icon = devIcon(d);
-  // Custom uploaded image always shows immediately
-  const custom = _devImages[d.model]||_devImages[d.ieee]; // model-based first
-  if(custom){
-    return `<img src="${custom}" style="width:28px;height:28px;border-radius:6px;object-fit:cover;display:block"
+  const model = d.model;
+  // If model has a server image (from smh_server_models) — always render img tag
+  // URL built fresh using current BASE, fallback to emoji on error
+  if(model && (window._serverModels||{})[model]){
+    const src = BASE + `/api/devices/image/${encodeURIComponent(model)}`;
+    return `<img src="${src}" style="width:28px;height:28px;border-radius:6px;object-fit:cover;display:block"
       onerror="this.outerHTML='<span style=\"font-size:16px\">${icon}</span>'">`;
   }
-  // Z2M image: only show if already confirmed to exist, else show emoji
-  if(d.model){
-    const model = d.model;
-    if(_imgOk[model] === true){
-      const src = `https://www.zigbee2mqtt.io/images/devices/${encodeURIComponent(model)}.png`;
-      return `<img src="${src}" style="width:28px;height:28px;border-radius:6px;object-fit:cover">`;
-    } else if(_imgOk[model] !== false){
-      // Not checked yet - show emoji, probe in background
-      const src = `https://www.zigbee2mqtt.io/images/devices/${encodeURIComponent(model)}.png`;
-      const img = new Image();
-      img.onload  = () => { _imgOk[model] = true; };
-      img.onerror = () => { _imgOk[model] = false; };
-      img.src = src;
-    }
-  }
+  // No server image — show emoji only (no Z2M fetch)
   return `<span style="font-size:16px">${icon}</span>`;
 }
 
