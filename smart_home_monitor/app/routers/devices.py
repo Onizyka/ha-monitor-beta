@@ -267,45 +267,6 @@ async def remove_duplicates(db: AsyncSession = Depends(get_db)):
     return {"deleted": deleted, "count": len(deleted)}
 
 
-@router.get("/{ieee}")
-async def get_device(ieee: str, db: AsyncSession = Depends(get_db)):
-    device = await db.get(Device, ieee)
-    if not device:
-        from fastapi import HTTPException
-        raise HTTPException(status_code=404, detail="Device not found")
-    return _serialize(device)
-
-
-@router.post("/{ieee}/notifications")
-async def set_device_notifications(
-    ieee: str, body: dict, db: AsyncSession = Depends(get_db),
-):
-    device = await db.get(Device, ieee)
-    if not device:
-        from fastapi import HTTPException
-        raise HTTPException(status_code=404, detail="Device not found")
-    return {"ok": True, "ieee": ieee, "telegram_notify": body.get("telegram_notify", False)}
-
-
-def _serialize(d: Device) -> dict:
-    offline_minutes = None
-    if d.last_seen and not d.online:
-        offline_minutes = int((datetime.utcnow() - d.last_seen).total_seconds() / 60)
-    return {
-        "ieee": d.ieee,
-        "friendly_name": d.friendly_name,
-        "model": d.model,
-        "vendor": d.vendor,
-        "device_type": d.device_type,
-        "online": d.online,
-        "battery": d.battery,
-        "has_battery": d.battery is not None,
-        "linkquality": d.linkquality,
-        "last_seen": d.last_seen.isoformat() if d.last_seen else None,
-        "offline_minutes": offline_minutes,
-    }
-
-
 import os, shutil
 from fastapi import UploadFile, File
 from fastapi.responses import FileResponse
@@ -349,3 +310,42 @@ async def list_device_images():
         if ext.lower() in [".png", ".jpg", ".jpeg", ".webp", ".gif"]:
             result.append(name)
     return result
+
+
+@router.get("/{ieee}")
+async def get_device(ieee: str, db: AsyncSession = Depends(get_db)):
+    device = await db.get(Device, ieee)
+    if not device:
+        from fastapi import HTTPException
+        raise HTTPException(status_code=404, detail="Device not found")
+    return _serialize(device)
+
+
+@router.post("/{ieee}/notifications")
+async def set_device_notifications(
+    ieee: str, body: dict, db: AsyncSession = Depends(get_db),
+):
+    device = await db.get(Device, ieee)
+    if not device:
+        from fastapi import HTTPException
+        raise HTTPException(status_code=404, detail="Device not found")
+    return {"ok": True, "ieee": ieee, "telegram_notify": body.get("telegram_notify", False)}
+
+
+def _serialize(d: Device) -> dict:
+    offline_minutes = None
+    if d.last_seen and not d.online:
+        offline_minutes = int((datetime.utcnow() - d.last_seen).total_seconds() / 60)
+    return {
+        "ieee": d.ieee,
+        "friendly_name": d.friendly_name,
+        "model": d.model,
+        "vendor": d.vendor,
+        "device_type": d.device_type,
+        "online": d.online,
+        "battery": d.battery,
+        "has_battery": d.battery is not None,
+        "linkquality": d.linkquality,
+        "last_seen": d.last_seen.isoformat() if d.last_seen else None,
+        "offline_minutes": offline_minutes,
+    }
