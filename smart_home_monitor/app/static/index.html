@@ -549,7 +549,7 @@ select.ctrl,input.ctrl{background:var(--bg3);border:1px solid var(--border2);col
   </div>
 
   <div style="padding-top:8px;border-top:1px solid var(--border)">
-    <div style="font-size:11px;color:var(--muted)"><span id="app-version">Home Assistant Monitor v1.2.4</span></div>
+    <div style="font-size:11px;color:var(--muted)"><span id="app-version">Home Assistant Monitor v1.2.5</span></div>
     <div style="font-size:11px;color:var(--muted);margin-top:2px">Zigbee2MQTT + HA API</div>
   </div>
 </div>
@@ -585,8 +585,7 @@ let _metricsCache = null;   // in-memory cache of metrics-available
 let _metricsCacheTs = 0;    // timestamp of last metrics-available fetch
 let _curBatDev   = null;
 let _devImages   = JSON.parse(localStorage.getItem('smh_dev_images')||'{}');
-// Refresh server-side images on load (overwrite localStorage with server URLs)
-(async()=>{
+async function loadDevImages(){
   try{
     const models=await fetch(window._BASE+'/api/devices/images-list').then(r=>r.json());
     models.forEach(m=>{
@@ -594,7 +593,7 @@ let _devImages   = JSON.parse(localStorage.getItem('smh_dev_images')||'{}');
     });
     localStorage.setItem('smh_dev_images',JSON.stringify(_devImages));
   }catch(e){}
-})();
+}
 let _batChart    = null;
 
 // Energy tracking: {"ieee::metric": {label, ieee, metric, color}}
@@ -1886,6 +1885,7 @@ async function loadAll(){
   // Всегда грузим данные — но если модалка открыта, не перерисовываем списки
   await Promise.allSettled([
     loadSummary(),
+    loadDevImages(),
     modalOpen ? get('/api/devices/').then(d=>{_devs=d;}) : loadDevices(),
     modalOpen ? get('/api/batteries/').then(d=>{if(d&&Array.isArray(d))window._batDataCache=d;}) : loadBats(),
     loadPumps(),
