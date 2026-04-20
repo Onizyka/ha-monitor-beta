@@ -549,7 +549,7 @@ select.ctrl,input.ctrl{background:var(--bg3);border:1px solid var(--border2);col
   </div>
 
   <div style="padding-top:8px;border-top:1px solid var(--border)">
-    <div style="font-size:11px;color:var(--muted)"><span id="app-version">Home Assistant Monitor v1.1.9</span></div>
+    <div style="font-size:11px;color:var(--muted)"><span id="app-version">Home Assistant Monitor v1.2.0</span></div>
     <div style="font-size:11px;color:var(--muted);margin-top:2px">Zigbee2MQTT + HA API</div>
   </div>
 </div>
@@ -564,6 +564,9 @@ select.ctrl,input.ctrl{background:var(--bg3);border:1px solid var(--border2);col
   console.log('[HAM] BASE =', window._BASE, '| path =', p);
 })();
 const BASE = window._BASE;
+
+// ── Utilities (defined early so all functions can use them) ──────────────
+function esc(s){return String(s??'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');}
 
 // ── State ────────────────────────────────────────────────────────────────
 let _devs=[], _alerts=[], _pumps=[];
@@ -611,7 +614,13 @@ async function get(p){
   const url=BASE+p;
   const r=await fetch(url);
   if(!r.ok){const t=await r.text();console.error('GET',url,'->',r.status,t);throw new Error(t||r.status);}
-  return r.json();
+  try{
+    return await r.json();
+  }catch(e){
+    const t=await r.clone().text().catch(()=>'');
+    console.error('GET JSON parse error',url,t.slice(0,200));
+    throw new Error('Ошибка разбора ответа сервера');
+  }
 }
 async function post(p,b){
   const url=BASE+p;
@@ -1567,9 +1576,9 @@ async function loadPumps(){try{_pumps=await get('/api/pumps/');}catch(e){_pumps=
 async function loadAlerts(){
   try{_alerts=await get('/api/alerts/?limit=50');renderAlerts();}
   catch(e){
-    // Strip HTML tags from error (e.g. 504 gateway page)
-    const msg=String(e.message||e).replace(/<[^>]+>/g,'').replace(/\s+/g,' ').trim().slice(0,80);
-    document.getElementById('alert-list').innerHTML=`<div class="errmsg">Ошибка: ${esc(msg)}</div>`;
+    const raw=String(e.message||e);
+    const msg=raw.replace(/<[^>]+>/g,'').replace(/\s+/g,' ').trim().slice(0,120)||'неизвестная ошибка';
+    document.getElementById('alert-list').innerHTML='<div class="errmsg">Ошибка alerts: '+msg+'</div>';
   }
 }
 async function clearAllAlerts(){
