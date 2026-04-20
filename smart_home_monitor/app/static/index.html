@@ -549,7 +549,7 @@ select.ctrl,input.ctrl{background:var(--bg3);border:1px solid var(--border2);col
   </div>
 
   <div style="padding-top:8px;border-top:1px solid var(--border)">
-    <div style="font-size:11px;color:var(--muted)"><span id="app-version">Home Assistant Monitor v1.3.1</span></div>
+    <div style="font-size:11px;color:var(--muted)"><span id="app-version">Home Assistant Monitor v1.3.2</span></div>
     <div style="font-size:11px;color:var(--muted);margin-top:2px">Zigbee2MQTT + HA API</div>
   </div>
 </div>
@@ -566,13 +566,6 @@ select.ctrl,input.ctrl{background:var(--bg3);border:1px solid var(--border2);col
 const BASE = window._BASE;
 
 // Populate _devImages from stored server models using current BASE
-(()=>{
-  const sm = window._serverModels || {};
-  Object.keys(sm).forEach(m=>{
-    _devImages[m] = BASE + `/api/devices/image/${encodeURIComponent(m)}`;
-  });
-})();
-
 // ── Utilities (defined early so all functions can use them) ──────────────
 function esc(s){return String(s??'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');}
 
@@ -593,10 +586,7 @@ let _metricsCache = null;   // in-memory cache of metrics-available
 let _metricsCacheTs = 0;    // timestamp of last metrics-available fetch
 let _curBatDev   = null;
 (()=>{
-  // Load server models and construct fresh URLs with current BASE
-  const serverModels = JSON.parse(localStorage.getItem('smh_server_models')||'{}');
-  window._serverModels = serverModels;
-})();
+  const _serverModels = JSON.parse(localStorage.getItem('smh_server_models')||'{}');
 let _devImages = {};
 async function loadDevImages(){
   try{
@@ -608,6 +598,7 @@ async function loadDevImages(){
       _devImages[m] = BASE + `/api/devices/image/${encodeURIComponent(m)}`;
     });
     localStorage.setItem('smh_server_models', JSON.stringify(serverModels));
+    Object.assign(_serverModels, serverModels);
     // Patch already-rendered device icons without full re-render
     _patchDevIcons();
   }catch(e){}
@@ -841,7 +832,7 @@ function devImg(d){
   const model = d.model;
   // If model has a server image (from smh_server_models) — always render img tag
   // URL built fresh using current BASE, fallback to emoji on error
-  if(model && (window._serverModels||{})[model]){
+  if(model && _serverModels[model]){
     const src = BASE + `/api/devices/image/${encodeURIComponent(model)}`;
     return `<img src="${src}" style="width:28px;height:28px;border-radius:6px;object-fit:cover;display:block"
       onerror="this.outerHTML='<span style=\"font-size:16px\">${icon}</span>'">`;
