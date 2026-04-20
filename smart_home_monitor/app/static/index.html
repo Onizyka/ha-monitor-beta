@@ -549,7 +549,7 @@ select.ctrl,input.ctrl{background:var(--bg3);border:1px solid var(--border2);col
   </div>
 
   <div style="padding-top:8px;border-top:1px solid var(--border)">
-    <div style="font-size:11px;color:var(--muted)"><span id="app-version">Home Assistant Monitor v1.2.0</span></div>
+    <div style="font-size:11px;color:var(--muted)"><span id="app-version">Home Assistant Monitor v1.2.1</span></div>
     <div style="font-size:11px;color:var(--muted);margin-top:2px">Zigbee2MQTT + HA API</div>
   </div>
 </div>
@@ -1597,9 +1597,11 @@ async function loadAppVersion(){
   }catch(e){}
 }
 function fltAlert(f,btn){
-  if(typeof _alertFilter==='undefined') return;
-  btn.closest('.card').querySelectorAll('.tab').forEach(b=>b.classList.remove('active'));
-  btn.classList.add('active');renderAlerts(f);
+  try{
+    btn.closest('.card').querySelectorAll('.tab').forEach(b=>b.classList.remove('active'));
+    btn.classList.add('active');
+    if(typeof renderAlerts==='function') renderAlerts(f);
+  }catch(e){console.error('fltAlert error:',e);}
 }
 const ACOLS={ok:'rgba(34,197,94,.15)',warn:'rgba(234,179,8,.15)',err:'rgba(239,68,68,.15)',info:'rgba(59,130,246,.15)'};
 const ATXT={ok:'#22c55e',warn:'#eab308',err:'#ef4444',info:'#3b82f6'};
