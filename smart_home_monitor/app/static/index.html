@@ -549,7 +549,7 @@ select.ctrl,input.ctrl{background:var(--bg3);border:1px solid var(--border2);col
   </div>
 
   <div style="padding-top:8px;border-top:1px solid var(--border)">
-    <div style="font-size:11px;color:var(--muted)"><span id="app-version">Home Assistant Monitor v1.2.8</span></div>
+    <div style="font-size:11px;color:var(--muted)"><span id="app-version">Home Assistant Monitor v1.2.9</span></div>
     <div style="font-size:11px;color:var(--muted);margin-top:2px">Zigbee2MQTT + HA API</div>
   </div>
 </div>
@@ -564,6 +564,14 @@ select.ctrl,input.ctrl{background:var(--bg3);border:1px solid var(--border2);col
   console.log('[HAM] BASE =', window._BASE, '| path =', p);
 })();
 const BASE = window._BASE;
+
+// Populate _devImages from stored server models using current BASE
+(()=>{
+  const sm = window._serverModels || {};
+  Object.keys(sm).forEach(m=>{
+    _devImages[m] = BASE + `/api/devices/image/${encodeURIComponent(m)}`;
+  });
+})();
 
 // ── Utilities (defined early so all functions can use them) ──────────────
 function esc(s){return String(s??'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');}
@@ -584,14 +592,26 @@ let _lastValues  = {};  // cache of last known values per device ieee
 let _metricsCache = null;   // in-memory cache of metrics-available
 let _metricsCacheTs = 0;    // timestamp of last metrics-available fetch
 let _curBatDev   = null;
-let _devImages   = JSON.parse(localStorage.getItem('smh_dev_images')||'{}');
+(()=>{
+  // Load server models and construct fresh URLs with current BASE
+  const serverModels = JSON.parse(localStorage.getItem('smh_server_models')||'{}');
+  window._serverModels = serverModels;
+})();
+let _devImages = {};
 async function loadDevImages(){
   try{
     const models=await fetch(window._BASE+'/api/devices/images-list').then(r=>r.json());
+    // Store just the model names, construct URLs fresh each time
+    const serverModels = {};
     models.forEach(m=>{
-      _devImages[m]=window._BASE+`/api/devices/image/${encodeURIComponent(m)}?t=${Date.now()}`;
+      serverModels[m] = true;
+      delete _imgOk[m];
     });
-    localStorage.setItem('smh_dev_images',JSON.stringify(_devImages));
+    localStorage.setItem('smh_server_models', JSON.stringify(serverModels));
+    // Update _devImages with fresh URLs using current BASE
+    models.forEach(m=>{
+      _devImages[m] = BASE + `/api/devices/image/${encodeURIComponent(m)}`;
+    });
   }catch(e){}
 }
 let _batChart    = null;
