@@ -118,7 +118,9 @@ async def last_values(ieee: str, db: AsyncSession = Depends(get_db)):
 
 @router.get("/metrics-available")
 async def metrics_available(db: AsyncSession = Depends(get_db)):
-    """Devices with the metrics they have data for."""
+    """Devices with the metrics they have data for.
+    Uses last 1000 rows per device to avoid full table scan on large histories.
+    """
     from sqlalchemy import text
     rows = (await db.execute(text("""
         SELECT
@@ -132,7 +134,12 @@ async def metrics_available(db: AsyncSession = Depends(get_db)):
             MAX(CASE WHEN dh.current     IS NOT NULL THEN 1 ELSE 0 END) AS has_current,
             MAX(CASE WHEN dh.energy      IS NOT NULL THEN 1 ELSE 0 END) AS has_energy
         FROM devices d
-        LEFT JOIN device_history dh ON d.ieee = dh.ieee
+        LEFT JOIN (
+            SELECT ieee, battery, linkquality, temperature, humidity,
+                   voltage, power, current, energy
+            FROM device_history
+            WHERE ts >= UTC_TIMESTAMP() - INTERVAL 7 DAY
+        ) dh ON d.ieee = dh.ieee
         WHERE d.friendly_name NOT IN ('Coordinator')
           AND (d.device_type IS NULL OR LOWER(d.device_type) != 'coordinator')
         GROUP BY d.ieee, d.friendly_name, d.device_type, d.battery
