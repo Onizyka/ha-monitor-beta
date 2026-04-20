@@ -308,10 +308,13 @@ select.ctrl,input.ctrl{background:var(--bg3);border:1px solid var(--border2);col
 <!-- ── Alerts ── -->
 <div class="card">
   <div class="card-head"><div class="card-title">История уведомлений</div></div>
-  <div class="tabs">
-    <button class="tab active" onclick="fltAlert('all',this)">Все</button>
-    <button class="tab" onclick="fltAlert('err',this)">Ошибки</button>
-    <button class="tab" onclick="fltAlert('warn',this)">Предупреждения</button>
+  <div class="tabs" style="display:flex;align-items:center;justify-content:space-between">
+    <div>
+      <button class="tab active" onclick="fltAlert('all',this)">Все</button>
+      <button class="tab" onclick="fltAlert('err',this)">Ошибки</button>
+      <button class="tab" onclick="fltAlert('warn',this)">Предупреждения</button>
+    </div>
+    <button class="btn btn-danger" style="font-size:12px;padding:3px 10px" onclick="clearAllAlerts()">🗑 Очистить всё</button>
   </div>
   <div id="alert-list"><div class="loader">Загрузка…</div></div>
 </div>
@@ -546,7 +549,7 @@ select.ctrl,input.ctrl{background:var(--bg3);border:1px solid var(--border2);col
   </div>
 
   <div style="padding-top:8px;border-top:1px solid var(--border)">
-    <div style="font-size:11px;color:var(--muted)">Home Assistant Monitor v1.0</div>
+    <div style="font-size:11px;color:var(--muted)"><span id="app-version">Home Assistant Monitor v1.1.7</span></div>
     <div style="font-size:11px;color:var(--muted);margin-top:2px">Zigbee2MQTT + HA API</div>
   </div>
 </div>
@@ -564,6 +567,7 @@ const BASE = window._BASE;
 
 // ── State ────────────────────────────────────────────────────────────────
 let _devs=[], _alerts=[], _pumps=[];
+let _alertFilter='all', _alertPage=0;
 let _notify  = JSON.parse(localStorage.getItem('smh_notify')   || '{}');
 let _selMets    = (()=>{
   const raw=JSON.parse(localStorage.getItem('smh_sel_mets')||'[]');
@@ -574,6 +578,8 @@ let _selMets    = (()=>{
 })();
 let _thresholds  = {};  // loaded from server: {"ieee::metric": {min,max,tg}}
 let _lastValues  = {};  // cache of last known values per device ieee
+let _metricsCache = null;   // in-memory cache of metrics-available
+let _metricsCacheTs = 0;    // timestamp of last metrics-available fetch
 let _curBatDev   = null;
 let _devImages   = JSON.parse(localStorage.getItem('smh_dev_images')||'{}');
 let _batChart    = null;
@@ -936,16 +942,21 @@ function closeModal(){document.getElementById('modal').style.display='none';_cur
 
 async function loadDeviceMetrics(ieee){
   const d=_devs.find(x=>x.ieee===ieee);
-  document.getElementById('m-metrics').innerHTML='<div class="loader" style="padding:10px">Сканирование…</div>';
+  document.getElementById('m-metrics').innerHTML='<div class="loader" style="padding:10px">Загрузка…</div>';
   try{
-    const data=await get('/api/devices/metrics-available');
-    const devData=data.find(x=>x.ieee===ieee);
+    // Use in-memory cache (60s TTL) — like 1.1.0, fast after first load
+    const now=Date.now();
+    if(!_metricsCache || now-_metricsCacheTs>60000){
+      _metricsCache=await get('/api/devices/metrics-available');
+      _metricsCacheTs=now;
+    }
+    const devData=_metricsCache.find(x=>x.ieee===ieee);
     const available=devData?.available_metrics||[];
     if(!available.length){
       document.getElementById('m-metrics').innerHTML='<div style="font-size:12px;color:var(--muted);padding:8px 0">Пока нет данных. Подожди первого MQTT-сообщения от устройства.</div>';
       return;
     }
-    // Fetch all last values in one request and cache
+    // Fetch last values
     const lastV={};
     if(d.battery!=null)     lastV.battery=d.battery;
     if(d.linkquality!=null) lastV.linkquality=d.linkquality;
@@ -954,7 +965,7 @@ async function loadDeviceMetrics(ieee){
       Object.assign(lastV, Object.fromEntries(
         Object.entries(lv).filter(([k,v])=>v!=null)
       ));
-      _lastValues[ieee]=lastV;  // cache for test notification
+      _lastValues[ieee]=lastV;
     }catch(e){}
 
     document.getElementById('m-metrics').innerHTML=available.map(mkey=>{
@@ -1557,6 +1568,21 @@ async function loadAlerts(){
   try{_alerts=await get('/api/alerts/?limit=50');renderAlerts();}
   catch(e){document.getElementById('alert-list').innerHTML='<div class="errmsg">Ошибка</div>';}
 }
+async function clearAllAlerts(){
+  if(!confirm('Удалить все уведомления?')) return;
+  try{
+    await del('/api/alerts/');
+    _alerts=[];renderAlerts();
+    toast('Уведомления удалены');
+  }catch(e){toast('Ошибка удаления','err');}
+}
+async function loadAppVersion(){
+  try{
+    const h=await get('/api/health');
+    const v=h.version||'';
+    if(v) document.getElementById('app-version').textContent='Home Assistant Monitor v'+v;
+  }catch(e){}
+}
 function fltAlert(f,btn){
   btn.closest('.card').querySelectorAll('.tab').forEach(b=>b.classList.remove('active'));
   btn.classList.add('active');renderAlerts(f);
@@ -1635,7 +1661,7 @@ async function delAllAlerts(){
   try{
     await del('/api/alerts/?acknowledged_only=true');
     toast('✓ Прочитанные уведомления удалены');
-    await loadAlerts();
+    await loadAlerts();loadAppVersion();
   }catch(e){toast('Ошибка','err');}
 }
 
@@ -1829,6 +1855,8 @@ async function loadAll(){
     loadPumps(),
     modalOpen ? get('/api/alerts/?limit=50').then(a=>{_alerts=a;}) : loadAlerts()
   ]);
+  // Pre-warm metrics cache in background so first device open is instant
+  if(!_metricsCache) get('/api/devices/metrics-available').then(d=>{_metricsCache=d;_metricsCacheTs=Date.now();}).catch(()=>{});
   await refreshEnergyValues();
   if(!modalOpen) renderEnergyCard();
 }

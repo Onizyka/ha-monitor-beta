@@ -11,7 +11,7 @@ router = APIRouter()
 @router.get("/")
 async def list_alerts(
     limit: int = Query(50, ge=1, le=500),
-    level: str | None = Query(None, regex="^(ok|warn|err|info)$"),
+    level: str | None = Query(None, pattern="^(ok|warn|err|info)$"),
     category: str | None = Query(None),
     unacked: bool = Query(False),
     db: AsyncSession = Depends(get_db),

@@ -10,7 +10,7 @@
 - 🔋 **Заряд батарей** — сортировка по уровню, график разряда, TG-алерт
 - ⚡ **Токопотребление** — мощность, ток, напряжение, энергия с графиком
 - 📈 **Конструктор графиков** — любые метрики, период от 3 часов до 30 дней
-- ⏱️ **Таймаут офлайн** — по умолчанию 180 минут (настраивается индивидуально для каждого устройства)
+- ⏱️ **Таймаут офлайн** — по умолчанию 180 минут (настраивается для каждого устройства)
 - 🔔 **История уведомлений** — пагинация, автоудаление через 24ч
 - 📨 **Telegram** — алерты офлайн, батареи, превышения порогов, ежедневный отчёт
 - 💬 **MAX** *(в разработке)* — уведомления в MAX мессенджер (max.ru)
@@ -22,26 +22,70 @@
 | Mosquitto broker | MQTT брокер |
 | Zigbee2MQTT | Мост Zigbee-координатора |
 | MariaDB | База данных |
+| phpMyAdmin | Управление базой данных |
 
-## База данных
+## Быстрый старт
 
-База создаётся один раз вручную через терминал аддона MariaDB:
+### 1. Установка
+
+1. **Настройки → Аддоны → Магазин аддонов → ⋮ → Репозитории**
+2. Добавить: `https://github.com/Onizyka/ha-monitor`
+3. Установить **Home Assistant Monitor**
+
+### 2. Установка phpMyAdmin
+
+Установить аддон **phpMyAdmin** из магазина аддонов → Запустить → Открыть веб-интерфейс
+
+### 3. Создание базы данных
+
+1. Нажать **SQL** (цифра 1) в верхней центральной части экрана
+2. В появившемся окне вставить код:
+
+![phpMyAdmin SQL](https://raw.githubusercontent.com/Onizyka/ha-monitor/main/smart_home_monitor/docs/phpmyadmin-sql.png)
 
 ```sql
-mysql -u root -p
-
 CREATE DATABASE IF NOT EXISTS `smarthome` CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
-CREATE USER IF NOT EXISTS 'smarthome'@'%' IDENTIFIED BY '<значение db_password из конфига>';
+CREATE USER IF NOT EXISTS 'smarthome'@'%' IDENTIFIED BY 'pass';
 GRANT ALL PRIVILEGES ON `smarthome`.* TO 'smarthome'@'%';
 FLUSH PRIVILEGES;
-EXIT;
 ```
 
-Имя базы, пользователя и пароль должны совпадать с `db_name`, `db_user`, `db_password` в конфигурации.
+Код создаёт базу данных `smarthome`, пользователя `smarthome` и пароль `pass`.
 
-### Смена имени базы данных
+3. Нажать кнопку **Вперёд** (цифра 2)
 
-Параметр `db_name` (по умолчанию `smarthome`) задаётся до первого запуска. Для смены: остановить аддон → создать новую базу → обновить `db_name` → запустить.
+### 4. Конфигурация
+
+Вкладка **Конфигурация** аддона:
+
+```yaml
+mqtt_host: core-mosquitto
+mqtt_port: 1883
+mqtt_user: "mqtt"
+mqtt_password: "mqtt"
+mqtt_topic_prefix: zigbee2mqtt
+
+db_host: core-mariadb
+db_port: 3306
+db_name: smarthome
+db_user: smarthome
+db_password: pass
+
+ha_url: http://supervisor/core
+ha_token: ""
+
+telegram_enabled: true
+telegram_token: "123456:ABC..."
+telegram_chat_id: "-100123456"
+
+log_level: info
+```
+
+### 5. Запуск
+
+Нажать **Запустить**, затем **Открыть веб-интерфейс**.
+Дашборд обновляется автоматически каждые 30 секунд.
+
 ## Настройка Telegram
 
 1. Написать [@BotFather](https://t.me/BotFather) → `/newbot` → получить токен
