@@ -26,3 +26,6 @@ apscheduler==3.10.4
 
 # MQTT
 aiomqtt==2.3.0
+
+# File upload support
+python-multipart==0.0.20
