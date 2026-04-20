@@ -17,9 +17,11 @@ Zigbee2MQTT payload field names vary by device. Common mappings:
 import asyncio
 import json
 import logging
+import os
 from datetime import datetime
 
 import aiomqtt
+import httpx
 from sqlalchemy import select
 
 from .config import settings
@@ -84,6 +86,33 @@ async def _connect_and_listen():
                     await _handle_device_state(device_name, payload)
 
 
+IMAGES_DIR = "/data/device_images"
+
+
+async def _download_model_image(model: str) -> None:
+    """Download device image from zigbee2mqtt.io if not already cached."""
+    if not model:
+        return
+    os.makedirs(IMAGES_DIR, exist_ok=True)
+    safe = "".join(c if c.isalnum() or c in "-_." else "_" for c in model)
+    # Check if any image already exists for this model
+    for ext in [".png", ".jpg", ".jpeg", ".webp"]:
+        if os.path.exists(os.path.join(IMAGES_DIR, f"{safe}{ext}")):
+            return  # Already have image
+    # Try downloading from zigbee2mqtt.io
+    url = f"https://www.zigbee2mqtt.io/images/devices/{model}.png"
+    try:
+        async with httpx.AsyncClient(timeout=10) as client:
+            r = await client.get(url, follow_redirects=True)
+            if r.status_code == 200 and r.headers.get("content-type", "").startswith("image"):
+                path = os.path.join(IMAGES_DIR, f"{safe}.png")
+                with open(path, "wb") as f:
+                    f.write(r.content)
+                logger.info("Downloaded image for model %s", model)
+    except Exception as e:
+        logger.debug("Could not download image for %s: %s", model, e)
+
+
 async def _handle_bridge_devices(devices: list):
     """Sync full device registry from bridge/devices."""
     if not isinstance(devices, list):
@@ -101,6 +130,11 @@ async def _handle_bridge_devices(devices: list):
             obj.device_type = d.get("type")
             db.add(obj)
         await db.commit()
+    # Download images for new models in background (non-blocking)
+    for d in devices:
+        model = d.get("definition", {}).get("model")
+        if model:
+            asyncio.create_task(_download_model_image(model))
     logger.debug("Bridge devices synced: %d entries", len(devices))
 
 

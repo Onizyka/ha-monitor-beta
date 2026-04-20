@@ -1,5 +1,5 @@
 name: "Home Assistant Monitor"
-version: "1.2.1"
+version: "1.2.3"
 slug: "smart_home_monitor"
 description: "Мониторинг Zigbee устройств, заряда батарей и уведомлений. Источник данных: Zigbee2MQTT + Home Assistant API."
 url: "https://github.com/Onizyka/ha-monitor"

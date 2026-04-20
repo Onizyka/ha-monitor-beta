@@ -304,3 +304,48 @@ def _serialize(d: Device) -> dict:
         "last_seen": d.last_seen.isoformat() if d.last_seen else None,
         "offline_minutes": offline_minutes,
     }
+
+
+import os, shutil
+from fastapi import UploadFile, File
+from fastapi.responses import FileResponse
+
+IMAGES_DIR = "/data/device_images"
+
+@router.post("/upload-image/{model}")
+async def upload_device_image(model: str, file: UploadFile = File(...)):
+    """Upload image for a device model, saved persistently on server."""
+    os.makedirs(IMAGES_DIR, exist_ok=True)
+    # Sanitize model name for filename
+    safe_model = "".join(c if c.isalnum() or c in "-_." else "_" for c in model)
+    ext = os.path.splitext(file.filename or "img.png")[1] or ".png"
+    path = os.path.join(IMAGES_DIR, f"{safe_model}{ext}")
+    with open(path, "wb") as f:
+        shutil.copyfileobj(file.file, f)
+    return {"ok": True, "path": f"/api/devices/image/{safe_model}"}
+
+
+@router.get("/image/{model}")
+async def get_device_image(model: str):
+    """Serve device image by model name."""
+    safe_model = "".join(c if c.isalnum() or c in "-_." else "_" for c in model)
+    for ext in [".png", ".jpg", ".jpeg", ".webp", ".gif"]:
+        path = os.path.join(IMAGES_DIR, f"{safe_model}{ext}")
+        if os.path.exists(path):
+            return FileResponse(path)
+    from fastapi import HTTPException
+    raise HTTPException(status_code=404, detail="Image not found")
+
+
+@router.get("/images-list")
+async def list_device_images():
+    """Return list of models that have custom images."""
+    if not os.path.exists(IMAGES_DIR):
+        return []
+    files = os.listdir(IMAGES_DIR)
+    result = []
+    for f in files:
+        name, ext = os.path.splitext(f)
+        if ext.lower() in [".png", ".jpg", ".jpeg", ".webp", ".gif"]:
+            result.append(name)
+    return result

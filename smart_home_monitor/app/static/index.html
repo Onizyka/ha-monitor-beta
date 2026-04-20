@@ -549,7 +549,7 @@ select.ctrl,input.ctrl{background:var(--bg3);border:1px solid var(--border2);col
   </div>
 
   <div style="padding-top:8px;border-top:1px solid var(--border)">
-    <div style="font-size:11px;color:var(--muted)"><span id="app-version">Home Assistant Monitor v1.2.1</span></div>
+    <div style="font-size:11px;color:var(--muted)"><span id="app-version">Home Assistant Monitor v1.2.3</span></div>
     <div style="font-size:11px;color:var(--muted);margin-top:2px">Zigbee2MQTT + HA API</div>
   </div>
 </div>
@@ -585,6 +585,16 @@ let _metricsCache = null;   // in-memory cache of metrics-available
 let _metricsCacheTs = 0;    // timestamp of last metrics-available fetch
 let _curBatDev   = null;
 let _devImages   = JSON.parse(localStorage.getItem('smh_dev_images')||'{}');
+// Refresh server-side images on load (overwrite localStorage with server URLs)
+(async()=>{
+  try{
+    const models=await fetch(window._BASE+'/api/devices/images-list').then(r=>r.json());
+    models.forEach(m=>{
+      _devImages[m]=window._BASE+`/api/devices/image/${encodeURIComponent(m)}?t=${Date.now()}`;
+    });
+    localStorage.setItem('smh_dev_images',JSON.stringify(_devImages));
+  }catch(e){}
+})();
 let _batChart    = null;
 
 // Energy tracking: {"ieee::metric": {label, ieee, metric, color}}
@@ -796,7 +806,7 @@ const _imgOk = {};
 function devImg(d){
   const icon = devIcon(d);
   // Custom uploaded image always shows immediately
-  const custom = _devImages[d.ieee];
+  const custom = _devImages[d.model]||_devImages[d.ieee]; // model-based first
   if(custom){
     return `<span class="dev-icon-wrap">
       <img src="${custom}" style="width:28px;height:28px;border-radius:6px;object-fit:cover"
@@ -925,7 +935,7 @@ async function openModal(ieee){
   // Image preview
   const prev=document.getElementById('m-img-preview');
   if(prev){
-    const custom=_devImages[d.ieee];
+    const custom=_devImages[d.model]||_devImages[d.ieee]; // model key first, ieee for legacy
     const z2mSrc=d.model?`https://www.zigbee2mqtt.io/images/devices/${encodeURIComponent(d.model)}.png`:'';
     if(custom) prev.innerHTML=`<img src="${custom}" style="width:48px;height:48px;object-fit:cover;border-radius:6px">`;
         else if(z2mSrc) prev.innerHTML=`<img src="${z2mSrc}" style="width:48px;height:48px;object-fit:cover;border-radius:6px" onerror="imgFallback(this,'${devIcon(d)}')">`;  
@@ -1238,24 +1248,34 @@ async function loadBatChart(){
 }
 
 
-function uploadDevImg(input){
+async function uploadDevImg(input){
   if(!_curDev||!input.files[0]) return;
-  const reader=new FileReader();
-  reader.onload=e=>{
-    const dataUrl=e.target.result;
-    _devImages[_curDev.ieee]=dataUrl;
+  const model=_curDev.model;
+  if(!model){toast('У устройства нет модели — нельзя привязать картинку','err');return;}
+  const file=input.files[0];
+  const form=new FormData();
+  form.append('file',file);
+  try{
+    const r=await fetch(BASE+`/api/devices/upload-image/${encodeURIComponent(model)}`,{method:'POST',body:form});
+    if(!r.ok) throw new Error(await r.text());
+    const data=await r.json();
+    // Store server URL in cache (keyed by model)
+    _devImages[model]=BASE+`/api/devices/image/${encodeURIComponent(model)}?t=${Date.now()}`;
     localStorage.setItem('smh_dev_images',JSON.stringify(_devImages));
-    // Update preview
     const prev=document.getElementById('m-img-preview');
-    if(prev) prev.innerHTML=`<img src="${dataUrl}" style="width:48px;height:48px;object-fit:cover">`;
+    if(prev) prev.innerHTML=`<img src="${_devImages[model]}" style="width:48px;height:48px;object-fit:cover;border-radius:6px">`;
     document.getElementById('m-img-clear').style.display='inline';
     renderDevs(_devFlt);
-    toast('✓ Картинка сохранена');
-  };
-  reader.readAsDataURL(input.files[0]);
+    toast('✓ Картинка сохранена для модели '+model);
+  }catch(e){
+    toast('Ошибка загрузки: '+e.message,'err');
+  }
 }
-function clearDevImg(){
+async function clearDevImg(){
   if(!_curDev) return;
+  const model=_curDev.model;
+  // Remove from local cache (both model and ieee keys)
+  delete _devImages[model];
   delete _devImages[_curDev.ieee];
   localStorage.setItem('smh_dev_images',JSON.stringify(_devImages));
   const prev=document.getElementById('m-img-preview');
