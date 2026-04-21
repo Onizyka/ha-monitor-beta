@@ -549,7 +549,7 @@ select.ctrl,input.ctrl{background:var(--bg3);border:1px solid var(--border2);col
   </div>
 
   <div style="padding-top:8px;border-top:1px solid var(--border)">
-    <div style="font-size:11px;color:var(--muted)"><span id="app-version">Home Assistant Monitor v1.3.5</span></div>
+    <div style="font-size:11px;color:var(--muted)"><span id="app-version">Home Assistant Monitor v1.3.7</span></div>
     <div style="font-size:11px;color:var(--muted);margin-top:2px">Zigbee2MQTT + HA API</div>
   </div>
 </div>
@@ -613,9 +613,7 @@ function _patchDevIcons(){
     if(!_devImages[d.model]) return;
     const iconDiv = row.querySelector('.dev-icon');
     if(!iconDiv) return;
-    const icon = devIcon(d);
-    iconDiv.innerHTML = `<img src="${_devImages[d.model]}" style="width:28px;height:28px;border-radius:6px;object-fit:cover;display:block"
-      onerror="this.outerHTML='<span style=\"font-size:16px\">${icon}</span>'">`;
+    iconDiv.innerHTML = `<img src="${_devImages[d.model]}" style="width:28px;height:28px;border-radius:6px;object-fit:cover;display:block">`;
   });
 }
 let _batChart    = null;
@@ -830,7 +828,7 @@ function devImg(d){
   const model = d.model;
   if(model && _serverModels[model]){
     const src = BASE + `/api/devices/image/${encodeURIComponent(model)}`;
-    return `<img src="${src}" style="width:28px;height:28px;border-radius:6px;object-fit:cover;display:block" onerror="this.style.display='none'">`;
+    return `<img src="${src}" style="width:28px;height:28px;border-radius:6px;object-fit:cover;display:block">`;
   }
   return '';
 }
@@ -944,8 +942,8 @@ async function openModal(ieee){
     const custom=_devImages[d.model]||_devImages[d.ieee]; // model key first, ieee for legacy
     const z2mSrc=d.model?`https://www.zigbee2mqtt.io/images/devices/${encodeURIComponent(d.model)}.png`:'';
     if(custom) prev.innerHTML=`<img src="${custom}" style="width:48px;height:48px;object-fit:cover;border-radius:6px">`;
-        else if(z2mSrc) prev.innerHTML=`<img src="${z2mSrc}" style="width:48px;height:48px;object-fit:cover;border-radius:6px" onerror="imgFallback(this,'${devIcon(d)}')">`;  
-    else prev.innerHTML=`<span style="font-size:24px">${devIcon(d)}</span>`;
+        else if(z2mSrc) prev.innerHTML=`<img src="${z2mSrc}" style="width:48px;height:48px;object-fit:cover;border-radius:6px" onerror="this.style.display='none'">`;  
+    else prev.innerHTML='';
     const clearBtn=document.getElementById('m-img-clear');
     if(clearBtn) clearBtn.style.display=custom?'inline':'none';
   }
@@ -1285,7 +1283,7 @@ async function clearDevImg(){
   delete _devImages[_curDev.ieee];
   localStorage.setItem('smh_dev_images',JSON.stringify(_devImages));
   const prev=document.getElementById('m-img-preview');
-  if(prev) prev.innerHTML=devIcon(_curDev);
+  if(prev) prev.innerHTML='';
   document.getElementById('m-img-clear').style.display='none';
   renderDevs(_devFlt);
   toast('Картинка убрана');
