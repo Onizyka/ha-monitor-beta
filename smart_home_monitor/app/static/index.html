@@ -553,7 +553,7 @@ select.ctrl,input.ctrl{background:var(--bg3);border:1px solid var(--border2);col
   </div>
 
   <div style="padding-top:8px;border-top:1px solid var(--border)">
-    <div style="font-size:11px;color:var(--muted)"><span id="app-version">Home Assistant Monitor v1.4.2</span></div>
+    <div style="font-size:11px;color:var(--muted)"><span id="app-version">Home Assistant Monitor v1.4.5</span></div>
     <div style="font-size:11px;color:var(--muted);margin-top:2px">Zigbee2MQTT + HA API</div>
   </div>
 </div>
@@ -1029,7 +1029,7 @@ async function loadDeviceMetrics(ieee){
             onclick="event.stopPropagation()">
           <span class="thr-unit">${m.unit}</span>
           <label class="thr-tg" onclick="event.stopPropagation()">
-            <span>TG</span>
+            <span>Telegram</span>
             <label class="tgl" style="transform:scale(0.75);margin-left:2px" onclick="event.stopPropagation()">
               <input type="checkbox" ${thr.tg===true?'checked':''} onchange="event.stopPropagation();saveThr('${id}','tg',this.checked)" onclick="event.stopPropagation()">
               <span class="tgl-t"></span>
@@ -1037,16 +1037,22 @@ async function loadDeviceMetrics(ieee){
           </label>
         </div>
         <div class="thr-msg-row" onclick="event.stopPropagation()">
-          <div style="font-size:11px;color:var(--muted);margin-bottom:4px">Текст TG при превышении Макс:</div>
+          <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:4px">
+            <span style="font-size:11px;color:var(--muted)">Текст Telegram при превышении Макс:</span>
+            <button class="btn" style="font-size:10px;padding:1px 6px" onclick="event.stopPropagation();resetThrMsg('${id}','msg_max',this)" title="Вернуть текст по умолчанию">↺</button>
+          </div>
           <textarea class="thr-msg-input" rows="2"
-            placeholder="${defMsgMax}"
-            onchange="saveThr('${id}','msg_max',this.value)"
-            onclick="event.stopPropagation()">${esc(thr.msg_max||'')}</textarea>
-          <div style="font-size:11px;color:var(--muted);margin:6px 0 4px">Текст TG при выходе ниже Мин:</div>
+            data-default="${defMsgMax.replace(/`/g,'\\`')}"
+            oninput="saveThr('${id}','msg_max',this.value)"
+            onclick="event.stopPropagation()">${esc(thr.msg_max||defMsgMax)}</textarea>
+          <div style="display:flex;align-items:center;justify-content:space-between;margin:6px 0 4px">
+            <span style="font-size:11px;color:var(--muted)">Текст Telegram при выходе ниже Мин:</span>
+            <button class="btn" style="font-size:10px;padding:1px 6px" onclick="event.stopPropagation();resetThrMsg('${id}','msg_min',this)" title="Вернуть текст по умолчанию">↺</button>
+          </div>
           <textarea class="thr-msg-input" rows="2"
-            placeholder="${defMsgMin}"
-            onchange="saveThr('${id}','msg_min',this.value)"
-            onclick="event.stopPropagation()">${esc(thr.msg_min||'')}</textarea>
+            data-default="${defMsgMin.replace(/`/g,'\\`')}"
+            oninput="saveThr('${id}','msg_min',this.value)"
+            onclick="event.stopPropagation()">${esc(thr.msg_min||defMsgMin)}</textarea>
           <div style="font-size:10px;color:var(--muted);margin-top:4px">Переменные: {value} {unit} {min} {max} {name} {time}</div>
         </div>
       </div>`;
@@ -1171,20 +1177,34 @@ function renderSelChips(){
   ).join('');
 }
 
+function resetThrMsg(id, field, btn){
+  const ta = btn.closest('.thr-msg-row').querySelector(`textarea[oninput*="${field}"]`);
+  if(!ta) return;
+  const def = ta.dataset.default || '';
+  ta.value = def;
+  saveThr(id, field, def);
+}
+
 async function saveThr(id, field, value){
   if(!_thresholds[id]) _thresholds[id]={min:null,max:null,tg:false};
   if(field==='min')      _thresholds[id].min = value===''?null:parseFloat(value);
   else if(field==='max') _thresholds[id].max = value===''?null:parseFloat(value);
-  else if(field==='tg')  _thresholds[id].tg = !!value;
-  else if(field==='msg_max') _thresholds[id].msg_max = value.trim()||null;
-  else if(field==='msg_min') _thresholds[id].msg_min = value.trim()||null;
+  else if(field==='tg'){
+    _thresholds[id].tg = !!value;
+    // If turning ON and thresholds exist — trigger immediate check
+    if(!!value && (_thresholds[id].min!=null || _thresholds[id].max!=null)){
+      post('/api/settings/check-thresholds-now').catch(()=>{});
+    }
+  }
+  else if(field==='msg_max') _thresholds[id].msg_max = value||null;
+  else if(field==='msg_min') _thresholds[id].msg_min = value||null;
   try{
     await post('/api/settings/thresholds', {[id]: _thresholds[id]});
     if(field==='min'||field==='max'){
       try{ await post('/api/settings/check-thresholds-now'); } catch(e2){}
       toast('Порог сохранён, проверка запущена');
     } else if(field.startsWith('msg_')){
-      toast('Текст сообщения сохранён');
+      toast('✓ Текст сохранён');
     }
   }catch(e){ console.error('saveThr',e); toast('Ошибка сохранения','err'); }
 }
