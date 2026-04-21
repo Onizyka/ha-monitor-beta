@@ -54,7 +54,16 @@ async def get_settings():
 
 @router.post("/")
 async def save_settings(body: dict):
-    return _save(body)
+    result = _save(body)
+    # Reschedule threshold checker if interval changed
+    try:
+        from .. import jobs
+        minutes = int(body.get("threshold_check_minutes") or 5)
+        if minutes < 1: minutes = 1
+        jobs.scheduler.reschedule_job("threshold_check", trigger="interval", minutes=minutes)
+    except Exception:
+        pass
+    return result
 
 
 @router.get("/thresholds")

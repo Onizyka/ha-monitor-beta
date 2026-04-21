@@ -178,7 +178,7 @@ async def check_metric_thresholds():
             if mn is not None and val <= float(mn):
                 tpl = cfg.get("msg_min") or "⬇️ <b>{name}</b> — {label} ниже минимума!\nТекущее: <b>{value} {unit}</b>  (порог мин: {min} {unit})"
                 msg = tpl.format(name=_html(name), label=label, value=val, unit=unit,
-                                 min=mn, max=mx if mx is not None else "—",
+                                 min=mn, max=mx if mx is not None else "—", time=now_msk().strftime("%d.%m %H:%M"),
                                  direction="ниже", ieee=ieee)
                 logger.info("  → BELOW MIN: %.3f <= %.3f", val, float(mn))
                 db.add(Alert(level="warn", category="threshold",
@@ -192,7 +192,7 @@ async def check_metric_thresholds():
             elif mx is not None and val >= float(mx):
                 tpl = cfg.get("msg_max") or "⬆️ <b>{name}</b> — {label} выше максимума!\nТекущее: <b>{value} {unit}</b>  (порог макс: {max} {unit})"
                 msg = tpl.format(name=_html(name), label=label, value=val, unit=unit,
-                                 min=mn if mn is not None else "—", max=mx,
+                                 min=mn if mn is not None else "—", max=mx, time=now_msk().strftime("%d.%m %H:%M"),
                                  direction="выше", ieee=ieee)
                 logger.info("  → ABOVE MAX: %.3f >= %.3f", val, float(mx))
                 db.add(Alert(level="err", category="threshold",
@@ -335,7 +335,8 @@ async def cleanup_old_alerts():
 
 def start_scheduler():
     scheduler.add_job(check_offline_devices,        "interval", minutes=5,  id="offline_check",   replace_existing=True)
-    scheduler.add_job(check_metric_thresholds,      "interval", minutes=5,  id="threshold_check", replace_existing=True)
+    _thr_interval = int(_load_sett().get("threshold_check_minutes") or 5)
+    scheduler.add_job(check_metric_thresholds,      "interval", minutes=_thr_interval,  id="threshold_check", replace_existing=True)
     scheduler.add_job(poll_pump_states,             "interval", minutes=1,  id="pump_poll",       replace_existing=True)
     scheduler.add_job(_schedule_daily_report_check, "interval", minutes=1,  id="daily_check",     replace_existing=True)
     scheduler.add_job(cleanup_old_alerts,           "interval", hours=1,    id="alert_cleanup",   replace_existing=True)

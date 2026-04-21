@@ -544,12 +544,16 @@ select.ctrl,input.ctrl{background:var(--bg3);border:1px solid var(--border2);col
       <div><div class="srow-label">Таймаут офлайн (мин)</div><div class="srow-desc">По умолчанию для всех устройств</div></div>
       <input class="num-input" type="number" id="s-off-min" min="5" max="1440" value="180" onchange="saveSett()">
     </div>
+    <div class="srow">
+      <div><div class="srow-label">Интервал проверки порогов (мин)</div><div class="srow-desc">Как часто проверять Мин/Макс метрик</div></div>
+      <input class="num-input" type="number" id="s-thr-interval" min="1" max="60" value="5" onchange="saveSett()">
+    </div>
     <button class="btn" style="width:100%;margin-top:8px" onclick="checkThresholdsNow()">⚡ Проверить пороги сейчас</button>
     <button class="btn" style="width:100%;margin-top:6px" onclick="openDeviceManager()">🗂 Управление устройствами в БД</button>
   </div>
 
   <div style="padding-top:8px;border-top:1px solid var(--border)">
-    <div style="font-size:11px;color:var(--muted)"><span id="app-version">Home Assistant Monitor v1.3.7</span></div>
+    <div style="font-size:11px;color:var(--muted)"><span id="app-version">Home Assistant Monitor v1.4.0</span></div>
     <div style="font-size:11px;color:var(--muted);margin-top:2px">Zigbee2MQTT + HA API</div>
   </div>
 </div>
@@ -1025,23 +1029,26 @@ async function loadDeviceMetrics(ieee){
             onclick="event.stopPropagation()">
           <span class="thr-unit">${m.unit}</span>
           <label class="thr-tg" onclick="event.stopPropagation()">
-            <input type="checkbox" ${thr.tg!==false?'checked':''} onchange="saveThr('${id}','tg',this.checked)" onclick="event.stopPropagation()">
             <span>TG</span>
+            <label class="tgl" style="transform:scale(0.75);margin-left:2px" onclick="event.stopPropagation()">
+              <input type="checkbox" ${thr.tg===true?'checked':''} onchange="event.stopPropagation();saveThr('${id}','tg',this.checked)" onclick="event.stopPropagation()">
+              <span class="tgl-t"></span>
+            </label>
           </label>
         </div>
-        ${hasThr?`<div class="thr-msg-row" onclick="event.stopPropagation()">
-          <div style="font-size:11px;color:var(--muted);margin-bottom:4px">Текст TG при превышении макс:</div>
+        ${<div class="thr-msg-row" onclick="event.stopPropagation()">
+          <div style="font-size:11px;color:var(--muted);margin-bottom:4px">Текст TG при превышении Макс:</div>
           <textarea class="thr-msg-input" rows="2"
             placeholder="${defMsgMax}"
             onchange="saveThr('${id}','msg_max',this.value)"
             onclick="event.stopPropagation()">${esc(thr.msg_max||'')}</textarea>
-          ${thr.min!=null?`<div style="font-size:11px;color:var(--muted);margin:6px 0 4px">Текст TG при снижении ниже мин:</div>
+          <div style="font-size:11px;color:var(--muted);margin:6px 0 4px">Текст TG при выходе ниже Мин:</div>
           <textarea class="thr-msg-input" rows="2"
             placeholder="${defMsgMin}"
             onchange="saveThr('${id}','msg_min',this.value)"
-            onclick="event.stopPropagation()">${esc(thr.msg_min||'')}</textarea>`:''}
-          <div style="font-size:10px;color:var(--muted);margin-top:4px">Переменные: {value} {unit} {min} {max} {name}</div>
-        </div>`:''}
+            onclick="event.stopPropagation()">${esc(thr.msg_min||'')}</textarea>
+          <div style="font-size:10px;color:var(--muted);margin-top:4px">Переменные: {value} {unit} {min} {max} {name} {time}</div>
+        </div>>`:''}
       </div>`;
     }).join('');
   }catch(e){
@@ -1165,7 +1172,7 @@ function renderSelChips(){
 }
 
 async function saveThr(id, field, value){
-  if(!_thresholds[id]) _thresholds[id]={min:null,max:null,tg:true};
+  if(!_thresholds[id]) _thresholds[id]={min:null,max:null,tg:false};
   if(field==='min')      _thresholds[id].min = value===''?null:parseFloat(value);
   else if(field==='max') _thresholds[id].max = value===''?null:parseFloat(value);
   else if(field==='tg')  _thresholds[id].tg = !!value;
@@ -1725,6 +1732,7 @@ async function loadSett(){
     document.getElementById('s-daily-avail').checked=_sett.daily_status_include_availability!==false;
     document.getElementById('s-daily-bat').checked=_sett.daily_status_include_battery!==false;
     document.getElementById('s-off-min').value=_sett.offline_check_minutes||180;
+    document.getElementById('s-thr-interval').value=_sett.threshold_check_minutes||5;
   }catch(e){}
   // also load thresholds
   try{_thresholds=await get('/api/settings/thresholds');}catch(e){}
@@ -1739,6 +1747,7 @@ async function saveSett(){
     daily_status_include_availability:document.getElementById('s-daily-avail').checked,
     daily_status_include_battery:document.getElementById('s-daily-bat').checked,
     offline_check_minutes:parseInt(document.getElementById('s-off-min').value)||180,
+    threshold_check_minutes:parseInt(document.getElementById('s-thr-interval').value)||5,
   };
   try{_sett=await post('/api/settings/',s);toast('✓ Настройки сохранены');}
   catch(e){toast('✗ Ошибка сохранения','err');}
