@@ -107,7 +107,7 @@ async def check_thresholds_now():
     if not thr:
         raise HTTPException(status_code=400,
                             detail="Пороги не настроены — открой устройство и задай Мин/Макс")
-    await check_metric_thresholds()
+    await check_metric_thresholds(force=True)
     return {"ok": True, "thresholds_checked": len(thr)}
 
 

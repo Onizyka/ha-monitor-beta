@@ -93,7 +93,7 @@ async def check_offline_devices():
 
 # ── Metric threshold checker ──────────────────────────────────────────────
 
-async def check_metric_thresholds():
+async def check_metric_thresholds(force: bool = False):
     s = _load_sett()
     thresholds = s.get("thresholds", {})
     if not thresholds:
@@ -163,7 +163,7 @@ async def check_metric_thresholds():
 
             # Check last alert throttle
             last_alert_str = cfg.get("last_alert")
-            if last_alert_str:
+            if last_alert_str and not force:
                 try:
                     last_alert = datetime.fromisoformat(last_alert_str)
                     elapsed = datetime.utcnow() - last_alert
