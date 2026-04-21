@@ -549,7 +549,7 @@ select.ctrl,input.ctrl{background:var(--bg3);border:1px solid var(--border2);col
   </div>
 
   <div style="padding-top:8px;border-top:1px solid var(--border)">
-    <div style="font-size:11px;color:var(--muted)"><span id="app-version">Home Assistant Monitor v1.3.3</span></div>
+    <div style="font-size:11px;color:var(--muted)"><span id="app-version">Home Assistant Monitor v1.3.4</span></div>
     <div style="font-size:11px;color:var(--muted);margin-top:2px">Zigbee2MQTT + HA API</div>
   </div>
 </div>
@@ -585,7 +585,7 @@ let _lastValues  = {};  // cache of last known values per device ieee
 let _metricsCache = null;   // in-memory cache of metrics-available
 let _metricsCacheTs = 0;    // timestamp of last metrics-available fetch
 let _curBatDev   = null;
-const _serverModels = JSON.parse(localStorage.getItem('smh_server_models')||'{}');
+var _serverModels = JSON.parse(localStorage.getItem('smh_server_models')||'{}');
 let _devImages = {};
 async function loadDevImages(){
   try{
